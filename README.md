@@ -2,7 +2,7 @@
 
 # patent-unveil-review
 
-> 从项目文档到**代理人审稿就绪的技术交底书**：专利点挖掘、授权可行性初筛、查新优先国知局公布公告站、区别特征回写、成文自检与交付留档。
+> 面向**工程方法、软件系统、数据处理与控制测算**类中国发明专利：从项目代码、算法、工程工具或方案文档到**代理人审稿就绪的技术交底书**。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
@@ -11,20 +11,22 @@
 
 <br>
 
-有设计文档和代码，但**专利点还没梳**？<br>
-交底书要**系统框图、流程图**，还要**代理人能直接改的 Word**？<br>
+有工程工具、算法流程或测算代码，但**专利点还没梳**？<br>
+交底书要**系统框图、流程图、公式和四客体保护思路**，还要**代理人能直接改的 Word**？<br>
 定稿之后还要**多轮补材料、纠错**，并希望**文件修改追溯**？<br>
 国知局公布站检索，期望 **次次爬成功、精准检索**？
 
 **本 Skill 按 AgentSkills 约定编排全流程，`SKILL.md` + `prompts/` 分步可读可迭代。**
 
-[功能特性](#功能特性) · [安装](#安装) · [Codex 快速安装](CODEX_INSTALL.md) · [使用](#使用) · [项目结构](#项目结构) · [示例](#示例) · [运行效果](#运行效果) · [参考文档](#参考文档) · [详细安装说明](INSTALL.md) · [技能入口](SKILL.md)
+[功能特性](#功能特性) · [安装](#安装) · [Codex 快速安装](CODEX_INSTALL.md) · [使用](#使用) · [项目结构](#项目结构) · [示例](#示例) · [参考文档](#参考文档) · [详细安装说明](INSTALL.md) · [技能入口](SKILL.md)
 
 </div>
 
 ---
 
 ## 功能特性
+
+> **适用范围**：工程方法、软件系统、数据处理、控制测算、工程仿真/测算工具类中国发明专利。结构/机械类仅提供有限辅助：需用户自备工程附图与物理机理依据，最高 WARN，不承诺创造性评估。
 
 <!-- 使用 HTML 表格：GitHub 上 Markdown 管道表会因右侧长路径/URL 把左列挤窄导致中文换行 -->
 <table>
@@ -37,9 +39,9 @@
 </thead>
 <tbody>
 <tr><td nowrap width="1%"><strong>项目扫描</strong></td><td>按优先级读文档 / 代码；<code>.docx</code> / <code>.pptx</code> 先转 Markdown 再扫（见 <code>prompts/project_scan.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>专利点</strong></td><td>候选点讨论与融合，并按技术问题、区别特征、技术效果、实施支撑做授权可行性初筛（<code>patent_points_analyzer.md</code>）</td></tr>
+<tr><td nowrap width="1%"><strong>专利点</strong></td><td>候选点讨论与融合，并按技术问题、区别特征、技术效果、实施支撑和方案成熟度做授权可行性初筛（<code>patent_points_analyzer.md</code>）</td></tr>
 <tr><td nowrap width="1%"><strong>查新</strong></td><td><strong>优先</strong> <a href="http://epub.cnipa.gov.cn/">国知局 · 中国专利公布公告</a>（<code>tools/cnipa_epub_search.py</code>）；异常或无果时降级 WebSearch（Google 学术 / Patents）。输出 A/B/C/D 风险等级、可用区别特征，并回写推荐方向（<code>prior_art_search.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>脱敏模版 + <strong>mermaid</strong> 系统框图与流程图；<code>mermaid_render.py</code> → PNG，默认再出 <strong>.docx</strong></td></tr>
+<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>脱敏模版 + <strong>mermaid</strong> 系统框图与流程图；默认按方法 + 系统/装置 + 电子设备 + 存储介质组织保护点；<code>mermaid_render.py</code> → PNG，默认再出 <strong>.docx</strong></td></tr>
 <tr><td nowrap width="1%"><strong>交付命名</strong></td><td>凡落盘交付：<code>{案件名}_{YYYYMMDDHHmmss}.md</code> 与同名 <code>.docx</code>（<code>disclosure_builder.md</code> §7.3）</td></tr>
 <tr><td nowrap width="1%"><strong>自检</strong></td><td>逻辑闭环、公式与参数一致、诚信非编造、PASS/WARN/FAIL 代理人审稿门禁（<code>disclosure_self_check.md</code>，不写入正文）</td></tr>
 <tr><td nowrap width="1%"><strong>迭代</strong></td><td><strong>合并</strong> / <strong>纠正</strong> 另存新文件；<code>交底书修订对话记录.md</code> 逐条追加（<code>iteration_context.md</code>、<code>iteration_dialog_log.py</code>）</td></tr>
@@ -67,7 +69,7 @@
 | Windows | `%USERPROFILE%\.codex\skills\patent-unveil-review\` |
 | macOS / Linux | `~/.codex/skills/patent-unveil-review/` |
 
-若拿到的是 zip 包，直接解压到 `~/.codex/skills/` 下即可；安装后重启 Codex 或开启新线程，再用「专利挖掘」「技术交底书」「查新」或 `patent-unveil-review` 触发。详见 [CODEX_INSTALL.md](CODEX_INSTALL.md)。
+若拿到的是 zip 包，直接解压到 `~/.codex/skills/` 下即可；安装后重启 Codex 或开启新线程，再用「工程方法专利挖掘」「技术交底书」「查新」或 `patent-unveil-review` 触发。详见 [CODEX_INSTALL.md](CODEX_INSTALL.md)。
 
 ### Claude Code
 
@@ -107,7 +109,7 @@ python -m playwright install chromium
 - 专利挖掘、专利点、**技术交底书**、查新、现有技术对比  
 - 斜杠指令（视宿主配置）：如 `/patent-unveil-review`、`/交底书`
 
-建议同时说明 **项目路径** 或 **技术主题**（与 `SKILL.md` 中 `argument-hint` 一致）。  
+建议同时说明 **项目路径** 或 **技术主题**（与 `SKILL.md` 中 `argument-hint` 一致）。主流程最适合工程测算工具、软件系统、数据处理流程、控制策略、识别方法等；纯结构/机械方案会进入有限辅助通道。  
 **查新（Step 5）** 会优先通过 [中国专利公布公告](http://epub.cnipa.gov.cn/) 检索中国专利公开信息，再按需补充其他来源；流程见 `prompts/prior_art_search.md`。  
 在**已有交底书文件**上补充材料或纠错时，无需说「迭代」——技能会按 `merger.md` / `correction_handler.md` 处理；细则见 [SKILL.md](SKILL.md)。
 
@@ -133,9 +135,9 @@ patent-unveil-review/
 │   ├── correction_handler.md
 │   └── template_reference.md
 ├── tools/                      # mermaid_render、md_to_docx、docx_to_md、pptx_to_md；国知局 cnipa_epub_*；iteration_dialog_log、delivery_check_log 等
-├── docs/                       # PRD、仓库结构说明、运行效果截图（效果例-*.jpg）
+├── docs/                       # PRD、仓库结构说明
 ├── examples/                   # 原材料示例（如 example_batch_job_scheduler/knowledge/）
-├── references/                 # 结构专利要求、法规来源索引
+├── references/                 # 工程方法/软件系统参考、结构有限辅助参考、法规来源索引
 ├── requirements.txt
 ├── LICENSE
 ├── INSTALL.md
@@ -149,20 +151,6 @@ patent-unveil-review/
 虚构扫描原材料见 [examples/README.md](examples/README.md)（如 `examples/example_batch_job_scheduler/knowledge/`）。  
 专利点、查新笔记、交底书等**完整产物**由流程生成到本地 **`outputs/{案件标识}/`**。
 
----
-
-## 运行效果
-
-**初版生成**（首次落盘交付）
-
-![初版生成：outputs 目录下的时间戳交底书、mermaid 图目录等](docs/效果例-初版生成.jpg)
-
-**迭代更新**（合并/纠正后再交付，多版本并存 + 对话记录）
-
-![迭代更新：新时间戳文件与交底书修订对话记录](docs/效果例-迭代更新.jpg)
-
----
-
 ## 参考文档
 
 - [技能入口与 Agent 流程](SKILL.md)（触发条件、`prompts/` 映射、工具表）
@@ -171,12 +159,14 @@ patent-unveil-review/
 - [示例案件与原材料说明](examples/README.md)
 - [产品流程与目录约定](docs/PRD.md)
 - [工程结构说明](docs/skill-structure.md)
+- [工程方法与软件系统类专利撰写参考](references/method_system_patent_guide.md)
 - [交底书模版细则](prompts/template_reference.md)
 
 ---
 
 <div align="center">
 
-MIT License © [handsomestWei](https://github.com/handsomestWei/)
+MIT License © [mordecairegular](https://github.com/mordecairegular)  
+Based on patent-disclosure-skill by [handsomestWei](https://github.com/handsomestWei/).
 
 </div>

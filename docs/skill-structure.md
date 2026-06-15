@@ -1,35 +1,46 @@
-# 本技能仓库结构说明
+# 仓库结构说明
 
 ## 设计原则
 
-- **`SKILL.md`**：入口与编排；具体写法分散在 **`prompts/`**，由执行方在运行时用 **`Read`** 加载，避免单文件过长。
-- **`tools/`**：可选脚本扩展，与编排解耦。Word/PPT 转可扫描文本时用 `docx_to_md.py` / `pptx_to_md.py`；查新优先 `cnipa_epub_search.py`（一步；需落盘或仅解析文件时用 `cnipa_epub_crawler.py` / `cnipa_epub_parse.py`，见 `prior_art_search.md`）。
-- **`outputs/`**：整目录由 `.gitignore` 忽略；可随仓库提交的范例见 **`examples/`**。
-- **`examples/`**：随仓库提交的虚构**原材料**示例（如 `knowledge/`）；流程产出在 `outputs/`。
+- **聚焦主流程**：工程方法、软件系统、数据处理、控制测算、工程仿真/测算工具类发明专利。
+- **有限结构辅助**：结构/机械材料只做文字、附图标记和格式辅助，不做专利点挖掘或创造性评估。
+- **证据先于结论**：查新结果须有来源状态、稳定 URL 或待复核说明，不能把候选页面当成已核验证据。
+- **交付可追溯**：交底书、查新 dossier、交付检查记录和迭代记录随案件目录保存。
 
 ## 目录一览
 
 | 路径 | 说明 |
 |------|------|
-| `SKILL.md` | 触发条件、工具映射、步骤顺序、`prompts/` 索引 |
-| `prompts/` | 分步模板（录入、扫描、专利点、查新、预览、成文、自检、迭代） |
-| `prompts/template_reference.md` | 交底书章节细则与 mermaid 图示范例 |
-| `tools/` | `mermaid_render.py`、`md_to_docx.py`、`docx_to_md.py`、`pptx_to_md.py`、`cnipa_epub_search.py`、`cnipa_epub_crawler.py`、`cnipa_epub_parse.py` 等；mermaid 须 Node；国知局抓取须 Playwright，见 `tools/README.md` |
-| `examples/example_batch_job_scheduler/` | 示例案件：仅 **`knowledge/`** 虚构原材料（专利点 / 交底书等由流程生成到 `outputs/`） |
-| `docs/PRD.md` | 流程与约束摘要 |
-| `docs/skill-structure.md` | 本仓库结构说明 |
-| `docs/效果例-*.jpg` | README「运行效果」配图 |
+| `SKILL.md` | 入口：适用范围、触发条件、步骤顺序、工具表和自用检查清单 |
+| `prompts/intake.md` | Step 1：路线分流、方案成熟度预检、结构有限辅助限制 |
+| `prompts/project_scan.md` | Step 2：项目文档与代码扫描，Office 文档先转 Markdown |
+| `prompts/patent_points_analyzer.md` | Step 3-4：候选点、授权可行性初筛、方案成熟度与保护组合建议 |
+| `prompts/prior_art_search.md` | Step 5：CNIPA EPUB 优先查新、稳定来源复核、A/B/C/D 分级 |
+| `prompts/disclosure_builder.md` | Step 7：交底书结构、四客体保护思路、图示和命名规则 |
+| `prompts/disclosure_self_check.md` | Step 8：内部自检与 PASS/WARN/FAIL 交付门禁 |
+| `prompts/iteration_context.md` | 迭代意图识别、命名、修订记录规则 |
+| `prompts/merger.md` | 新材料增量合并 |
+| `prompts/correction_handler.md` | 对话纠错与事实修正 |
+| `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、四客体模板 |
+| `references/method_system_patent_guide.md` | 工程方法与软件系统类专利撰写参考 |
+| `references/structural_patent_requirements.md` | 结构有限辅助参考，不用于创造性评估 |
+| `references/legal_sources.md` | 法源索引 |
+| `tools/` | CNIPA 查新、公开页验证、mermaid/DOCX 转换、dossier、交付日志等脚本 |
+| `examples/` | 脱敏示例原材料；正式输出应写入用户案件目录 |
 
-## 环境变量 `CLAUDE_SKILL_DIR`
+## 用户产出约定
 
-在 Claude Code、OpenClaw 等环境中，常由平台将 **`CLAUDE_SKILL_DIR`** 设为技能根目录，即包含 `SKILL.md` 的目录。在本地用 Cursor 打开本仓库时，该目录即仓库根；`${CLAUDE_SKILL_DIR}/prompts/...` 与 `./prompts/...` 等价。
+推荐路径：
 
-## 用户定稿建议路径
+```text
+outputs/{案件标识}/
+```
 
-推荐将每次案件的定稿放在：
+凡向用户交付的交底书 `.md` / `.docx` 文件名须为：
 
-`outputs/{案件标识}/`
+```text
+{案件名}_{YYYYMMDDHHmmss}.md
+{案件名}_{YYYYMMDDHHmmss}.docx
+```
 
-可将 `examples/example_batch_job_scheduler/knowledge/` 的结构复制到自建案件目录（或 `outputs/{案件标识}/knowledge/`）后替换为真实原材料。
-
-**交付留档**：凡写入用户产出目录的交底书定稿（**含首次 Step 7 与迭代**），主名均为 **`{案件名}_{YYYYMMDDHHmmss}.md`** 及同名 **`.docx`**（见 **`prompts/disclosure_builder.md` §7.3 第 5 点**），旧稿保留同目录。迭代时另在案件目录维护 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或手工）。流程见 **`prompts/iteration_context.md`**。
+首次定稿和迭代稿均适用，不默认覆盖旧稿。
