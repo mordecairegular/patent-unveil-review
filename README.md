@@ -175,26 +175,6 @@ patent-unveil-review/
 
 ---
 
-## 支持作者
-
-如果这个 Skill 帮您节省了写交底书的时间，可以请我喝杯咖啡☕随缘支持，感谢感谢🙏🙏
-
-<div align="left">
-
-<table>
-<tr>
-<td valign="middle" align="left" style="padding-right: 16px;">
-
-<img src="docs/thanks.jpg" alt="随缘支持" width="280" />
-
-</td>
-</tr>
-</table>
-
-</div>
-
----
-
 <div align="center">
 
 MIT License © [handsomestWei](https://github.com/handsomestWei/)
