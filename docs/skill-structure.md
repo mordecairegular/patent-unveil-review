@@ -26,6 +26,7 @@
 | `references/structural_patent_requirements.md` | 结构有限辅助参考，不用于创造性评估 |
 | `references/legal_sources.md` | 法源索引 |
 | `tools/` | CNIPA 查新、公开页验证、mermaid/DOCX 转换、dossier、交付日志等脚本 |
+| `templates/patent_formula_manifest.yaml` | 关键公式 manifest 模板，用于公式编号、量纲校核和 DOCX 数学 QA |
 | `examples/` | 脱敏示例原材料；正式输出应写入用户案件目录 |
 
 ## 用户产出约定

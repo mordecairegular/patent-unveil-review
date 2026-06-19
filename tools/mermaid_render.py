@@ -22,7 +22,7 @@
   python tools/mermaid_render.py -i draft.md -o out/disclosure.md --docx out/custom.docx
   python tools/mermaid_render.py -i draft.md -o disclosure.md --no-docx   # 仅 Markdown
 
-写出 .md 后**默认**调用 ``md_to_docx.py``；Word 失败不导致进程失败（退出码 0），并提示手动转换。
+写出 .md 后**默认**调用 ``md_to_docx.py``；Word 生成或 DOCX 数学 QA 失败时返回非零退出码，避免交付含公式残留的 DOCX。
 """
 from __future__ import annotations
 
@@ -288,7 +288,7 @@ def _print_manual_docx_hint(out_md: Path, docx_out: Path, base_dir: Path, md_scr
 
 def try_write_docx(out_md: Path, docx_out: Path) -> bool:
     """
-    调用同目录下的 md_to_docx.py。成功返回 True；失败打印警告与手动命令，返回 False。
+    调用同目录下的 md_to_docx.py。成功返回 True；失败或 DOCX 数学 QA 未通过时返回 False。
     """
     tools_dir = Path(__file__).resolve().parent
     md_script = tools_dir / "md_to_docx.py"
@@ -470,7 +470,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.docx is not None
         else out_path.with_suffix(".docx")
     )
-    try_write_docx(out_path, docx_path)
+    if not try_write_docx(out_path, docx_path):
+        return 1
 
     return 0
 

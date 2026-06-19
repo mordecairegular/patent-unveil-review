@@ -92,7 +92,7 @@ Windows 上若仅装 Node 未执行 `npm install`，脚本会通过 `npx -y @mer
 ### 与交底书约定
 
 - 技能要求定稿**同时**交付 **Markdown + Word**，且 **`-o` 主文件名须含 `_{YYYYMMDDHHmmss}`**（`prompts/disclosure_builder.md` §7.3 第 5 点，含首次定稿）；**3.2 系统框图**与 **3.4 流程图**均用 fenced mermaid，**不要** ASCII 文字流程图或框图。
-- 交付代理人前：运行 `mermaid_render.py` 一步即可（默认再调 `md_to_docx.py`）；若 Word 失败，按 stderr 提示手动执行 `md_to_docx.py`。
+- 交付代理人前：运行 `mermaid_render.py` 一步即可（默认再调 `md_to_docx.py` 并执行 DOCX 数学 QA）；若 Word 生成或 QA 失败，命令返回非零，须修正后重跑，不得交付失败 DOCX。
 
 ---
 
@@ -106,7 +106,7 @@ Windows 上若仅装 Node 未执行 `npm install`，脚本会通过 `npx -y @mer
 
 **mathtext 兼容**：渲染前自动将常见 LaTeX 简写映射为 mathtext 符号（如 ``\ge``→``\geq``、``\le``→``\leq``、``\land``→``\wedge``）；块级式内**换行压成一行**、``\tag{1}`` 转为式末 ``(1)``；仍无法解析的公式保留原文。
 
-**失败降级**：某一公式渲染失败时**不中断**——该处**保留原文**（``$...$`` 或 ``$$...$$``）；``md_to_docx`` 对未转换的 ``$$`` 块以 **Consolas 代码块**写入 Word。
+**失败降级**：本脚本仅用于旧版图片公式流程。正式链路中公式由 `md_to_docx.py` 写为 OMML，并由 `qa_docx_math.py` 检查；若 DOCX 中残留 LaTeX 命令或代码样式公式，QA 会失败。
 
 **Word 版式**：默认公式为可编辑 OMML，不是图片；**mermaid 框图/流程图**仍按 **5.5×8.2 英寸**上限等比嵌入。只有显式启用旧版 PNG 公式流程时，公式图才会作为图片插入。
 
@@ -139,12 +139,13 @@ python3 tools/math_render.py -i draft.md -o out.md --assets-dir math_figures
 pip install -r requirements.txt
 ```
 
-依赖为 `python-docx`（见仓库根目录 `requirements.txt`）。
+依赖为 `python-docx`（见仓库根目录 `requirements.txt`）。保存 DOCX 后默认运行 `qa_docx_math.py`；正式交付不得使用 `--skip-math-qa`。
 
 ### 用法
 
 ```bash
 python3 tools/md_to_docx.py --input path/to/交底书.md --output path/to/交底书.docx
+python3 tools/md_to_docx.py -i path/to/交底书.md -o path/to/交底书.docx --math-manifest templates/patent_formula_manifest.yaml
 ```
 
 图片 `![](相对路径.png)`：默认相对 **Markdown 文件所在目录**；也可指定根目录：
@@ -175,6 +176,31 @@ python3 tools/md_to_docx.py -i a.md -o a.docx --image-max-width-inches 6 --image
 | `---` 等 | 浅色分隔线 |
 | `![](path)` | 嵌入图片（路径需存在；默认宽/高上限内等比缩放；公式不走图片，mermaid/普通图才走图片） |
 | `$` / `\\(...\\)` / `$$` / `\\[...\\]` LaTeX | 写入 Word 原生 OMML 可编辑公式；若 Markdown 已含旧版公式 PNG 注释，Word 仍优先采用可编辑公式并跳过公式图片 |
+
+块级公式含 `\tag{1}` 时，`md_to_docx.py` 使用无边框两列表格排版：左列公式居中，右列编号右对齐，不依赖空格对齐。
+
+---
+
+## qa_docx_math.py — DOCX 数学公式 QA
+
+扫描 `.docx` 内部 `word/document.xml` 的可见文本和 OMML 结构，作为交付前门禁。
+
+### 检查内容
+
+- `math_block_count`：OMML 公式数量。
+- `suspicious_text_count` / `failed_patterns`：发现 `frac{`、`mathrm{`、`\(`、`\)`、`\[`、`\]`、`begin{`、`end{`、`$` 等残留则 FAIL。
+- `equation_number_count`：识别 `(1)`、`(2)` 等编号；传入 manifest 时检查缺失与重复。
+- 结构校验：manifest 中含 `\frac` 时要求 DOCX 内存在 `<m:f>`；含上下标时要求存在 OMML script 结构。
+
+### 用法
+
+```bash
+python3 tools/qa_docx_math.py outputs/case/交底书.docx
+python3 tools/qa_docx_math.py outputs/case/交底书.docx --manifest outputs/case/formula_manifest.yaml
+python3 tools/qa_docx_math.py outputs/case/交底书.docx --json
+```
+
+输出首行为 `PASS` 或 `FAIL`。`FAIL` 时不得交付该 DOCX；先修 Markdown LaTeX、manifest 或转换链路后重跑。
 
 **未完整支持**：复杂嵌套列表、HTML 块、**未预渲染的** mermaid 围栏（仍为代码块）、脚注、任务列表等。定稿前请运行 **`mermaid_render.py`**；若仅用外部工具导出 PNG，可直接写 `![](...)`。
 

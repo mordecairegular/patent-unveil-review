@@ -10,7 +10,9 @@
 **连续多行正文**（中间无空行、且非列表/标题等）时，**每一行**输出为 Word 中**独立一段**，
 以便「（1）…（2）…」等分条换行；若须在同一段内接排，请写**同一行**内或用 Markdown 空行分隔逻辑段。
 
-定稿宜先用同目录 **`mermaid_render.py`** 将 **mermaid** 转为 PNG；**LaTeX 公式**（``$...$`` / ``$$...$$``）由 **`math_render.py`**（或 ``md_to_docx`` 自动调用）转为 PNG；失败时保留原文写入 Word。
+定稿宜先用同目录 **`mermaid_render.py`** 将 **mermaid** 转为 PNG；**LaTeX 公式**
+（``$...$`` / ``$$...$$``）由本脚本写入 Word 原生 OMML 可编辑公式。
+保存 DOCX 后默认执行 ``qa_docx_math.py``，若残留 LaTeX 命令或公式结构异常则退出失败。
 
 用法：
   python md_to_docx.py --input disclosure.md --output disclosure.docx
@@ -52,13 +54,13 @@ _INLINE_MATH_WITH_HIDDEN_IMG_RE = re.compile(
     r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
 )
 _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE = re.compile(
-    r"\\\(((?:\\.|[^)])+?)\\\)\s*"
+    r"\\\((.+?)\\\)\s*"
     r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
 )
 _INLINE_MATH_DOLLAR_RE = re.compile(
     r"(?<!\$)\$(?!\$)((?:\\.|[^$\n])+?)\$(?!\$)"
 )
-_INLINE_MATH_PAREN_RE = re.compile(r"\\\(((?:\\.|[^)])+?)\\\)")
+_INLINE_MATH_PAREN_RE = re.compile(r"\\\((.+?)\\\)")
 _INLINE_TEX_TOKEN_RE = re.compile(
     r"(?<![\w$])"
     r"(?:"
@@ -102,6 +104,11 @@ _GREEK_AND_OPERATOR_COMMANDS = {
     "infty": "∞",
     "min": "min",
     "max": "max",
+    "in": "∈",
+    "varepsilon": "ε",
+    "epsilon": "ε",
+    "pi": "π",
+    "Phi": "Φ",
 }
 
 
@@ -321,20 +328,175 @@ def _structured_symbol_xml(text: str) -> str:
     return base_xml
 
 
+def _parse_latex_fragment(text: str) -> str:
+    xml, _pos = _parse_latex_sequence(text, 0, stop=None)
+    return xml
+
+
+def _read_balanced_group(text: str, pos: int) -> tuple[str, int]:
+    """Read a {...} group starting at pos, returning inner text and next pos."""
+    if pos >= len(text) or text[pos] != "{":
+        return "", pos
+    depth = 0
+    start = pos + 1
+    for idx in range(pos, len(text)):
+        ch = text[idx]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:idx], idx + 1
+    return text[start:], len(text)
+
+
+def _read_script_value(text: str, pos: int) -> tuple[str, int]:
+    """Read one LaTeX atom used as a subscript/superscript value."""
+    if pos < len(text) and text[pos] == "{":
+        return _read_balanced_group(text, pos)
+    if pos < len(text) and text[pos] == "\\":
+        start = pos
+        pos += 1
+        while pos < len(text) and text[pos].isalpha():
+            pos += 1
+        if pos < len(text) and text[pos] == "{":
+            _inner, pos = _read_balanced_group(text, pos)
+        return text[start:pos], pos
+    start = pos
+    while pos < len(text) and (
+        text[pos].isalnum() or text[pos] in ",.=+-*/()[]Α-Ωα-ω"
+    ):
+        pos += 1
+    if pos == start and pos < len(text):
+        pos += 1
+    return text[start:pos], pos
+
+
+def _wrap_math_script(base_xml: str, sub_xml: str | None, sup_xml: str | None) -> str:
+    if sub_xml is not None and sup_xml is not None:
+        return (
+            "<m:sSubSup>"
+            f"<m:e>{base_xml}</m:e>"
+            f"<m:sub>{sub_xml}</m:sub>"
+            f"<m:sup>{sup_xml}</m:sup>"
+            "</m:sSubSup>"
+        )
+    if sub_xml is not None:
+        return f"<m:sSub><m:e>{base_xml}</m:e><m:sub>{sub_xml}</m:sub></m:sSub>"
+    if sup_xml is not None:
+        return f"<m:sSup><m:e>{base_xml}</m:e><m:sup>{sup_xml}</m:sup></m:sSup>"
+    return base_xml
+
+
+def _read_latex_command_name(text: str, pos: int) -> tuple[str, int]:
+    start = pos
+    while pos < len(text) and text[pos].isalpha():
+        pos += 1
+    return text[start:pos], pos
+
+
+def _parse_latex_command(text: str, pos: int) -> tuple[str, int]:
+    """Parse one LaTeX command into an OMML fragment. pos points at backslash."""
+    pos += 1
+    if pos >= len(text):
+        return _omml_run_xml("\\"), pos
+
+    if not text[pos].isalpha():
+        ch = text[pos]
+        pos += 1
+        if ch in {",", ";", ":", " "}:
+            return _omml_run_xml(" "), pos
+        return _omml_run_xml(ch), pos
+
+    name, pos = _read_latex_command_name(text, pos)
+
+    if name in {"left", "right"}:
+        return "", pos
+
+    if name == "frac":
+        num, pos = _read_balanced_group(text, pos)
+        den, pos = _read_balanced_group(text, pos)
+        return (
+            "<m:f>"
+            f"<m:num>{_parse_latex_fragment(num)}</m:num>"
+            f"<m:den>{_parse_latex_fragment(den)}</m:den>"
+            "</m:f>"
+        ), pos
+
+    if name in {"mathrm", "operatorname", "text"}:
+        if pos < len(text) and text[pos] == "{":
+            inner, pos = _read_balanced_group(text, pos)
+            return _omml_run_xml(inner), pos
+        return _omml_run_xml(name), pos
+
+    if name == "mathcal":
+        if pos < len(text) and text[pos] == "{":
+            inner, pos = _read_balanced_group(text, pos)
+            return _omml_run_xml(inner), pos
+        return _omml_run_xml(name), pos
+
+    if name in {"quad", "qquad"}:
+        return _omml_run_xml(" "), pos
+
+    value = _GREEK_AND_OPERATOR_COMMANDS.get(name)
+    if value is not None:
+        return _omml_run_xml(value), pos
+    return _omml_run_xml(name), pos
+
+
+def _read_plain_math_text(text: str, pos: int) -> tuple[str, int]:
+    start = pos
+    while pos < len(text) and text[pos] not in "\\{}_^":
+        pos += 1
+    return text[start:pos], pos
+
+
+def _parse_latex_sequence(
+    text: str,
+    pos: int,
+    *,
+    stop: str | None,
+) -> tuple[str, int]:
+    parts: list[str] = []
+    while pos < len(text):
+        if stop is not None and text[pos] == stop:
+            return "".join(parts), pos + 1
+
+        ch = text[pos]
+        if ch == "\\":
+            atom_xml, pos = _parse_latex_command(text, pos)
+        elif ch == "{":
+            inner, pos = _read_balanced_group(text, pos)
+            atom_xml = _parse_latex_fragment(inner)
+        elif ch == "}":
+            if stop is None:
+                atom_xml = _omml_run_xml(ch)
+                pos += 1
+            else:
+                return "".join(parts), pos + 1
+        else:
+            plain, pos = _read_plain_math_text(text, pos)
+            atom_xml = _omml_run_xml(plain)
+
+        sub_xml = None
+        sup_xml = None
+        while pos < len(text) and text[pos] in "_^":
+            marker = text[pos]
+            raw, pos = _read_script_value(text, pos + 1)
+            parsed = _parse_latex_fragment(raw)
+            if marker == "_":
+                sub_xml = parsed
+            else:
+                sup_xml = parsed
+        parts.append(_wrap_math_script(atom_xml, sub_xml, sup_xml))
+    return "".join(parts), pos
+
+
 def _omml_math_xml(text: str) -> str:
     body, _tag = _extract_formula_tag(_strip_math_wrapper(text))
-    parts: list[str] = []
-    pos = 0
-    for match in _INLINE_TEX_TOKEN_RE.finditer(body):
-        if match.start() > pos:
-            parts.append(_omml_run_xml(body[pos : match.start()]))
-        parts.append(_structured_symbol_xml(match.group(0)))
-        pos = match.end()
-    if pos < len(body):
-        parts.append(_omml_run_xml(body[pos:]))
     return (
         '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
-        + "".join(parts)
+        + _parse_latex_fragment(body)
         + "</m:oMath>"
     )
 
@@ -343,17 +505,63 @@ def _add_inline_omml_math(paragraph, text: str) -> None:
     paragraph._element.append(parse_xml(_omml_math_xml(text)))
 
 
+def _make_table_borderless(table) -> None:
+    borders = parse_xml(
+        '<w:tblBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:top w:val="nil"/>'
+        '<w:left w:val="nil"/>'
+        '<w:bottom w:val="nil"/>'
+        '<w:right w:val="nil"/>'
+        '<w:insideH w:val="nil"/>'
+        '<w:insideV w:val="nil"/>'
+        "</w:tblBorders>"
+    )
+    table._tbl.tblPr.append(borders)
+
+
+def _set_cell_width_inches(cell, width_in: float) -> None:
+    twips = int(width_in * 1440)
+    tc_pr = cell._tc.get_or_add_tcPr()
+    tc_pr.append(
+        parse_xml(
+            '<w:tcW xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            f'w:w="{twips}" w:type="dxa"/>'
+        )
+    )
+
+
 def _add_math_block(doc: Document, text: str) -> None:
     body, tag = _extract_formula_tag(_strip_math_wrapper(text))
+    if tag:
+        table = doc.add_table(rows=1, cols=2)
+        table.autofit = False
+        _make_table_borderless(table)
+        left = table.cell(0, 0)
+        right = table.cell(0, 1)
+        _set_cell_width_inches(left, 5.7)
+        _set_cell_width_inches(right, 0.7)
+
+        lp = left.paragraphs[0]
+        lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        lp.paragraph_format.space_before = Pt(3)
+        lp.paragraph_format.space_after = Pt(6)
+        lp.paragraph_format.keep_together = True
+        lp._element.append(parse_xml(_omml_math_xml(body)))
+
+        rp = right.paragraphs[0]
+        rp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        rp.paragraph_format.space_before = Pt(3)
+        rp.paragraph_format.space_after = Pt(6)
+        run = rp.add_run(f"({tag})")
+        _set_run_font(run, "宋体", 10.5)
+        return
+
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(3)
     p.paragraph_format.space_after = Pt(6)
     p.paragraph_format.keep_together = True
     p._element.append(parse_xml(_omml_math_xml(body)))
-    if tag:
-        run = p.add_run(f"    ({tag})")
-        _set_run_font(run, "宋体", 10.5)
 
 
 def _looks_like_math_text(text: str) -> bool:
@@ -1198,6 +1406,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="兼容旧参数；当前默认已不渲染公式图片，公式写为 Word 可编辑 OMML",
     )
+    p.add_argument(
+        "--math-manifest",
+        default=None,
+        help="可选公式 manifest（YAML），用于保存后校验公式编号和 OMML 结构",
+    )
+    p.add_argument(
+        "--skip-math-qa",
+        action="store_true",
+        help="跳过 DOCX 数学公式 QA（仅用于排障；正式交付不得使用）",
+    )
     args = p.parse_args(argv)
 
     in_path = Path(args.input).resolve()
@@ -1225,6 +1443,24 @@ def main(argv: list[str] | None = None) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
     print(f"已写入: {out_path}")
+    if not args.skip_math_qa:
+        try:
+            from qa_docx_math import check_docx_math, format_report
+
+            report = check_docx_math(
+                out_path,
+                manifest_path=args.math_manifest,
+            )
+        except Exception as exc:
+            print(f"DOCX 数学公式 QA 无法执行：{exc}", file=sys.stderr)
+            return 1
+        print(format_report(report), file=sys.stderr)
+        if not report.passed:
+            print(
+                "错误：DOCX 数学公式 QA 未通过；请修正 LaTeX/符号表或 OMML 生成链路后再交付。",
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 
