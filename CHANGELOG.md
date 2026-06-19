@@ -4,6 +4,28 @@
 
 ---
 
+## v3.0.2 (2026-06-19) - DOCX delivery QA hardening
+
+- Extended `qa_docx_math.py` from math-only QA into a DOCX delivery gate: it now reports embedded media count, Consolas/code-style runs, unrendered mermaid source residue, generic LaTeX command residue, and missing expected media.
+- Added `md_to_docx.py --min-media-count` and `--allow-code-style` so final delivery can require rendered figures while still allowing diagnostic runs when needed.
+- Changed `mermaid_render.py` so a failed mermaid render still writes the Markdown troubleshooting draft but stops Word generation, preventing unrendered `flowchart TB` / mermaid code blocks from entering final DOCX.
+- Updated prompts and docs to require Word XML QA for formulas and diagrams, and to record when page-level Word/LibreOffice visual QA is unavailable.
+- Added regression tests for unrendered mermaid code blocks and missing expected DOCX media.
+
+---
+
+## v3.0.1 (2026-06-19) - DOCX formula subscript and numbering hardening
+
+- Fixed bare display formula lines such as `E(r) = V_sys / [r · ln(R_socket/R_pin)]` so `md_to_docx.py` upgrades them to block-level editable OMML instead of leaving underscore identifiers as visible text.
+- Fixed formulas followed by a standalone numbering line such as `(4)` so the number is folded into the formula block and rendered in the right-hand borderless-table numbering cell.
+- Fixed LaTeX parsing so `_` / `^` bind only to the final symbol in a plain run, preventing a full expression prefix from becoming the subscript base.
+- Added inline bare-subscript detection for prose next to Chinese text, so `V_sys为...` and `R_pin为...` become OMML subscripts instead of ordinary text.
+- Added manifest-driven auto-numbering: `md_to_docx.py --math-manifest` now assigns right-hand equation numbers to untagged display math blocks in manifest order before QA runs.
+- Added QA failure pattern `bare_subscript_identifier`; generated DOCX now fails when visible text still contains `V_sys`, `R_pin`, or similar raw underscore identifiers.
+- Added regression coverage for the screenshot-style formula line plus standalone number, and for QA rejection of bare underscore variables.
+
+---
+
 ## v3.0.0 (2026-06-15) — 收缩为工程方法与软件系统主流程
 
 ### 改造动因

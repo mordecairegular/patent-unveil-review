@@ -12,7 +12,7 @@
 
 交底书 **3.2 系统框图**与 **3.4 流程图**均使用 fenced mermaid；**不要** ASCII「文字箭头」流程图或框图。
 
-**降级**：某一围栏 ``mmdc`` 生图失败时**不中断**：该处**保留原** `` ```mermaid`` … `` ``` `` 围栏；其余块照常渲染。仍写出 .md 并**照常尝试** ``md_to_docx.py``（Word 中失败块以代码块形式出现）。
+**降级**：某一围栏 ``mmdc`` 生图失败时**不中断 Markdown**：该处**保留原** `` ```mermaid`` … `` ``` `` 围栏；其余块照常渲染。若本轮要生成 Word，则停止并返回失败，避免未渲染的 mermaid 源码以代码块形式进入定稿 DOCX。
 
 **清晰度**：默认对 ``mmdc`` 传入较大视口（``-w`` / ``-H``）与 ``-s 2``（Puppeteer 像素密度），PNG 在 Word 中按约 5.5 英寸宽嵌入时更锐利。可用 ``--mmdc-scale 3`` 等进一步提高（文件更大）。
 
@@ -22,7 +22,7 @@
   python tools/mermaid_render.py -i draft.md -o out/disclosure.md --docx out/custom.docx
   python tools/mermaid_render.py -i draft.md -o disclosure.md --no-docx   # 仅 Markdown
 
-写出 .md 后**默认**调用 ``md_to_docx.py``；Word 生成或 DOCX 数学 QA 失败时返回非零退出码，避免交付含公式残留的 DOCX。
+写出 .md 后**默认**调用 ``md_to_docx.py``；Word 生成或 DOCX 交付 QA 失败时返回非零退出码，避免交付含公式、图示或代码样式残留的 DOCX。
 """
 from __future__ import annotations
 
@@ -262,7 +262,14 @@ def render_markdown_mermaid(
     return "".join(out), ok, failed
 
 
-def _print_manual_docx_hint(out_md: Path, docx_out: Path, base_dir: Path, md_script: Path) -> None:
+def _print_manual_docx_hint(
+    out_md: Path,
+    docx_out: Path,
+    base_dir: Path,
+    md_script: Path,
+    *,
+    min_media_count: int = 0,
+) -> None:
     print(
         "提示：可手动将上述 Markdown 转为 Word（需已 pip install -r requirements.txt）：",
         file=sys.stderr,
@@ -278,6 +285,8 @@ def _print_manual_docx_hint(out_md: Path, docx_out: Path, base_dir: Path, md_scr
             "--base-dir",
             str(base_dir),
         ]
+        if min_media_count > 0:
+            parts.extend(["--min-media-count", str(min_media_count)])
         print("  " + " ".join(shlex.quote(p) for p in parts), file=sys.stderr)
     else:
         print(
@@ -286,7 +295,7 @@ def _print_manual_docx_hint(out_md: Path, docx_out: Path, base_dir: Path, md_scr
         )
 
 
-def try_write_docx(out_md: Path, docx_out: Path) -> bool:
+def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) -> bool:
     """
     调用同目录下的 md_to_docx.py。成功返回 True；失败或 DOCX 数学 QA 未通过时返回 False。
     """
@@ -297,7 +306,13 @@ def try_write_docx(out_md: Path, docx_out: Path) -> bool:
 
     if not md_script.is_file():
         print("警告：未找到 md_to_docx.py，跳过 Word。", file=sys.stderr)
-        _print_manual_docx_hint(out_md, docx_out, base_dir, md_script)
+        _print_manual_docx_hint(
+            out_md,
+            docx_out,
+            base_dir,
+            md_script,
+            min_media_count=min_media_count,
+        )
         return False
 
     cmd = [
@@ -310,6 +325,8 @@ def try_write_docx(out_md: Path, docx_out: Path) -> bool:
         "--base-dir",
         str(base_dir),
     ]
+    if min_media_count > 0:
+        cmd.extend(["--min-media-count", str(min_media_count)])
     try:
         r = subprocess.run(
             cmd,
@@ -319,11 +336,23 @@ def try_write_docx(out_md: Path, docx_out: Path) -> bool:
         )
     except subprocess.TimeoutExpired:
         print("警告：生成 Word 超时（300s）。", file=sys.stderr)
-        _print_manual_docx_hint(out_md, docx_out, base_dir, md_script)
+        _print_manual_docx_hint(
+            out_md,
+            docx_out,
+            base_dir,
+            md_script,
+            min_media_count=min_media_count,
+        )
         return False
     except OSError as e:
         print(f"警告：无法启动 md_to_docx：{e}", file=sys.stderr)
-        _print_manual_docx_hint(out_md, docx_out, base_dir, md_script)
+        _print_manual_docx_hint(
+            out_md,
+            docx_out,
+            base_dir,
+            md_script,
+            min_media_count=min_media_count,
+        )
         return False
 
     if r.returncode != 0:
@@ -331,7 +360,13 @@ def try_write_docx(out_md: Path, docx_out: Path) -> bool:
         err = (r.stderr or r.stdout or "").strip()
         if err:
             print(err[:2000], file=sys.stderr)
-        _print_manual_docx_hint(out_md, docx_out, base_dir, md_script)
+        _print_manual_docx_hint(
+            out_md,
+            docx_out,
+            base_dir,
+            md_script,
+            min_media_count=min_media_count,
+        )
         return False
 
     print(f"已写入 Word: {docx_out}", file=sys.stderr)
@@ -465,12 +500,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_docx:
         return 0
 
+    if n_fail:
+        print(
+            "[mermaid_render] 错误：仍有 mermaid 围栏未渲染为 PNG，已停止生成 Word；"
+            "请修正 mermaid 语法或 mmdc/Chrome 环境后重跑。Markdown 已保留失败围栏供排障。",
+            file=sys.stderr,
+        )
+        return 1
+
     docx_path = (
         args.docx.resolve()
         if args.docx is not None
         else out_path.with_suffix(".docx")
     )
-    if not try_write_docx(out_path, docx_path):
+    if not try_write_docx(out_path, docx_path, min_media_count=n_ok):
         return 1
 
     return 0

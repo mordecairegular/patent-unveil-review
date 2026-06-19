@@ -71,6 +71,11 @@ _INLINE_TEX_TOKEN_RE = re.compile(
     r")"
     r"(?![\w$])"
 )
+_BARE_SUBSCRIPT_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9$])"
+    r"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+(?:\^[A-Za-z0-9]+)?"
+    r"(?![A-Za-z0-9$])"
+)
 _SINGLE_LINE_BRACKET_MATH_RE = re.compile(r"^\\\[(.+)\\\]$")
 _SINGLE_LINE_DOLLAR_MATH_RE = re.compile(r"^\$\$(.+)\$\$$")
 _GREEK_AND_OPERATOR_COMMANDS = {
@@ -451,6 +456,14 @@ def _read_plain_math_text(text: str, pos: int) -> tuple[str, int]:
     return text[start:pos], pos
 
 
+def _split_plain_script_base(text: str) -> tuple[str, str]:
+    """Split a plain run before _/^ so the script binds only to the last symbol."""
+    match = re.search(r"([A-Za-z][A-Za-z0-9]*|[Α-Ωα-ω]+)$", text)
+    if not match:
+        return "", text
+    return text[: match.start()], match.group(1)
+
+
 def _parse_latex_sequence(
     text: str,
     pos: int,
@@ -476,7 +489,13 @@ def _parse_latex_sequence(
                 return "".join(parts), pos + 1
         else:
             plain, pos = _read_plain_math_text(text, pos)
-            atom_xml = _omml_run_xml(plain)
+            if plain and pos < len(text) and text[pos] in "_^":
+                prefix, base = _split_plain_script_base(plain)
+                if prefix:
+                    parts.append(_omml_run_xml(prefix))
+                atom_xml = _omml_run_xml(base)
+            else:
+                atom_xml = _omml_run_xml(plain)
 
         sub_xml = None
         sup_xml = None
@@ -571,6 +590,84 @@ def _looks_like_math_text(text: str) -> bool:
     if _INLINE_TEX_TOKEN_RE.search(body):
         return True
     return bool(re.search(r"[A-Za-zΑ-Ωα-ω]", body) and re.search(r"(?:[_^]\{?|[=<>≤≥+\-*/]|\\(?:frac|sum|prod|min|max|cdot|leq|geq))", body))
+
+
+def _extract_trailing_plain_equation_number(text: str) -> tuple[str, str | None]:
+    match = re.search(r"\s+\(([0-9]+[a-z]?)\)\s*$", text.strip())
+    if not match:
+        return text.strip(), None
+    return text.strip()[: match.start()].rstrip(), match.group(1)
+
+
+def _looks_like_standalone_math_line(text: str) -> bool:
+    body, _tag = _extract_trailing_plain_equation_number(text)
+    if not body or len(body) < 3:
+        return False
+    if re.search(r"[\u4e00-\u9fff]", body):
+        return False
+    if body.startswith(("#", "|", ">", "!", "-", "*", "+", "`")):
+        return False
+    has_operator = bool(re.search(r"(?:=|<=|>=|\\leq?|\\geq?|[+\-*/])", body))
+    has_math_symbol = bool(
+        re.search(
+            r"(?:[A-Za-z][A-Za-z0-9]*_|\\(?:frac|sum|prod|min|max|cdot|leq|geq|ln|eta|pi|Phi|Delta))",
+            body,
+        )
+    )
+    return has_operator and has_math_symbol
+
+
+def _numbered_math_source(body: str, tag: str | None) -> str:
+    stripped = body.strip()
+    if not tag:
+        return stripped
+    return f"{stripped}\\tag{{{tag}}}"
+
+
+def _parse_formula_numbers_from_manifest(manifest_path: str | Path | None) -> list[str]:
+    if manifest_path is None:
+        return []
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise FileNotFoundError(path)
+
+    numbers: list[str] = []
+    current: dict[str, str] | None = None
+
+    def flush_current() -> None:
+        nonlocal current
+        if current is None:
+            return
+        display = current.get("display", "true").strip().lower()
+        is_display = display not in {"false", "no", "0"}
+        latex = current.get("latex", "").strip()
+        number = current.get("number", "").strip()
+        formula_id = current.get("id", "").strip()
+        if not number and re.fullmatch(r"[0-9]+[a-z]?", formula_id):
+            number = formula_id
+        if is_display and latex and number:
+            numbers.append(number)
+        current = None
+
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("- "):
+            flush_current()
+            current = {}
+            line = line[2:].strip()
+            if not line:
+                continue
+        if current is None or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        if key not in {"id", "number", "latex", "display"}:
+            continue
+        current[key] = value.strip().strip('"').strip("'")
+    flush_current()
+    return numbers
 
 
 def _is_diagram_image(alt: str, src: str) -> bool:
@@ -833,6 +930,11 @@ def _add_text_segment_with_math(paragraph, text: str, *, mono: bool = False) -> 
             tokens.append((match.start(), match.end(), match.group(1)))
             taken.append((match.start(), match.end()))
     for match in _INLINE_TEX_TOKEN_RE.finditer(text):
+        if _span_overlaps(taken, match.start(), match.end()):
+            continue
+        tokens.append((match.start(), match.end(), match.group(0)))
+        taken.append((match.start(), match.end()))
+    for match in _BARE_SUBSCRIPT_TOKEN_RE.finditer(text):
         if _span_overlaps(taken, match.start(), match.end()):
             continue
         tokens.append((match.start(), match.end(), match.group(0)))
@@ -1146,6 +1248,7 @@ def convert_md_to_docx(
     *,
     image_max_w_in: float = _DEFAULT_IMAGE_MAX_W_IN,
     image_max_h_in: float = _DEFAULT_IMAGE_MAX_H_IN,
+    formula_numbers: list[str] | None = None,
 ) -> Document:
     doc = Document()
     # 默认正文样式
@@ -1161,6 +1264,8 @@ def convert_md_to_docx(
     lines = md_text.splitlines()
     i = 0
     para_buf: list[str] = []
+    auto_formula_numbers = [n.strip() for n in (formula_numbers or []) if n.strip()]
+    formula_number_index = 0
 
     def flush_paragraph():
         nonlocal para_buf
@@ -1177,6 +1282,26 @@ def convert_md_to_docx(
                     image_max_h_in=image_max_h_in,
                 )
         para_buf = []
+
+    def consume_formula_number(tag: str | None) -> None:
+        nonlocal formula_number_index
+        if not tag or formula_number_index >= len(auto_formula_numbers):
+            return
+        remaining = auto_formula_numbers[formula_number_index:]
+        if tag in remaining:
+            formula_number_index += remaining.index(tag) + 1
+
+    def source_with_auto_formula_number(text: str) -> str:
+        nonlocal formula_number_index
+        body, tag = _extract_formula_tag(_strip_math_wrapper(text))
+        if tag:
+            consume_formula_number(tag)
+            return text
+        if formula_number_index >= len(auto_formula_numbers):
+            return text
+        tag = auto_formula_numbers[formula_number_index]
+        formula_number_index += 1
+        return _numbered_math_source(body, tag)
 
     while i < len(lines):
         raw = lines[i]
@@ -1214,7 +1339,7 @@ def convert_md_to_docx(
         single_bracket_math = _SINGLE_LINE_BRACKET_MATH_RE.match(line.strip())
         if single_bracket_math:
             flush_paragraph()
-            _add_math_block(doc, single_bracket_math.group(1).strip())
+            _add_math_block(doc, source_with_auto_formula_number(single_bracket_math.group(1).strip()))
             i += 1
             if i < len(lines) and _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip()):
                 i += 1
@@ -1233,14 +1358,14 @@ def convert_md_to_docx(
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
                 if cm:
                     i += 1
-            _add_math_block(doc, "\n".join(math_lines))
+            _add_math_block(doc, source_with_auto_formula_number("\n".join(math_lines)))
             continue
 
         # 块级公式：$$ ... $$ + 可选 HTML 注释（Word 嵌 PNG；预览见 LaTeX 原文）
         single_dollar_math = _SINGLE_LINE_DOLLAR_MATH_RE.match(line.strip())
         if single_dollar_math:
             flush_paragraph()
-            _add_math_block(doc, single_dollar_math.group(1).strip())
+            _add_math_block(doc, source_with_auto_formula_number(single_dollar_math.group(1).strip()))
             i += 1
             if i < len(lines) and _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip()):
                 i += 1
@@ -1259,7 +1384,7 @@ def convert_md_to_docx(
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
                 if cm:
                     i += 1
-            _add_math_block(doc, "\n".join(math_lines))
+            _add_math_block(doc, source_with_auto_formula_number("\n".join(math_lines)))
             continue
 
         # 独立 HTML 注释行（公式图 / mermaid 框图引用）
@@ -1273,6 +1398,20 @@ def convert_md_to_docx(
                 image_max_h_in=image_max_h_in,
             )
             i += 1
+            continue
+
+        if _looks_like_standalone_math_line(line):
+            flush_paragraph()
+            body, tag = _extract_trailing_plain_equation_number(line)
+            consumed = 1
+            if tag is None and i + 1 < len(lines):
+                number_line = lines[i + 1].strip()
+                number_match = re.fullmatch(r"\(([0-9]+[a-z]?)\)", number_line)
+                if number_match:
+                    tag = number_match.group(1)
+                    consumed = 2
+            _add_math_block(doc, source_with_auto_formula_number(_numbered_math_source(body, tag)))
+            i += consumed
             continue
 
         # 图片行或含行内公式/注释的段落
@@ -1414,7 +1553,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--skip-math-qa",
         action="store_true",
-        help="跳过 DOCX 数学公式 QA（仅用于排障；正式交付不得使用）",
+        help="跳过 DOCX 交付 QA（仅用于排障；正式交付不得使用）",
+    )
+    p.add_argument(
+        "--allow-code-style",
+        action="store_true",
+        help="允许 DOCX 中存在 Consolas/代码样式（仅用于排障；正式交付不得使用）",
+    )
+    p.add_argument(
+        "--min-media-count",
+        type=int,
+        default=0,
+        metavar="N",
+        help="要求 DOCX 至少嵌入 N 个 word/media 文件；用于确认 mermaid 图示已进入 Word",
     )
     args = p.parse_args(argv)
 
@@ -1433,11 +1584,18 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_math_render:
         md_text = _maybe_render_math_md(md_text, base)
 
+    try:
+        formula_numbers = _parse_formula_numbers_from_manifest(args.math_manifest)
+    except Exception as exc:
+        print(f"Unable to read math manifest for formula numbering: {exc}", file=sys.stderr)
+        return 1
+
     doc = convert_md_to_docx(
         md_text,
         base_dir=base,
         image_max_w_in=args.image_max_width_inches,
         image_max_h_in=args.image_max_height_inches,
+        formula_numbers=formula_numbers,
     )
     out_path = Path(args.output).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1450,14 +1608,16 @@ def main(argv: list[str] | None = None) -> int:
             report = check_docx_math(
                 out_path,
                 manifest_path=args.math_manifest,
+                allow_code_style=args.allow_code_style,
+                min_media_count=max(args.min_media_count, 0),
             )
         except Exception as exc:
-            print(f"DOCX 数学公式 QA 无法执行：{exc}", file=sys.stderr)
+            print(f"DOCX 交付 QA 无法执行：{exc}", file=sys.stderr)
             return 1
         print(format_report(report), file=sys.stderr)
         if not report.passed:
             print(
-                "错误：DOCX 数学公式 QA 未通过；请修正 LaTeX/符号表或 OMML 生成链路后再交付。",
+                "错误：DOCX 交付 QA 未通过；请修正 LaTeX/符号表、OMML 或图示生成链路后再交付。",
                 file=sys.stderr,
             )
             return 1

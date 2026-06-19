@@ -45,9 +45,12 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 若扫描范围内含 **Word（.docx）** 或 **PowerPoint（.pptx）**，须在 Step 2 纳入阅读前用本仓库 **`docx_to_md.py`** / **`pptx_to_md.py`** 转为 Markdown；依赖 **`pip install -r requirements.txt`**，命令与说明见下表对应行。
 
-### 数学公式与 Word QA 硬约束
+### 数学公式、图示与 Word QA 硬约束
 
-涉及关键公式、符号表或量纲推导的交底书，须先建立公式清单（可复制 **`templates/patent_formula_manifest.yaml`**），字段至少含 `id`、`number`、`title`、`latex`、`display`、`dimension_check`；正文只引用清单中的公式，不得临场自由拼写关键公式。公式源必须是合法 LaTeX：希腊字母写 `\eta`、`\pi`、`\Phi`，正体文本下标写 `\mathrm{}`，分式写 `\frac{...}{...}`，求和写 `\sum_{t=1}^{T}`。`.docx` 交付前必须运行 **`tools/qa_docx_math.py`**（`md_to_docx.py` 默认已执行）；若发现 `frac{`、`mathrm{`、`\(`、`\)`、`$` 等残留或 manifest 编号/OMML 结构不一致，本轮不得作为定稿交付。
+涉及关键公式、符号表或量纲推导的交底书，须先建立公式清单（可复制 **`templates/patent_formula_manifest.yaml`**），字段至少含 `id`、`number`、`title`、`latex`、`display`、`dimension_check`；正文只引用清单中的公式，不得临场自由拼写关键公式。公式源必须是合法 LaTeX：希腊字母写 `\eta`、`\pi`、`\Phi`，正体文本下标写 `\mathrm{}`，分式写 `\frac{...}{...}`，求和写 `\sum_{t=1}^{T}`。若源稿中出现整行裸公式（例如 `V_sys / ln(R_socket/R_pin)`）或下一行单独编号 `(4)`，`md_to_docx.py` 必须升级为块级 OMML 公式并用右侧编号结构排版；正文解释中的 `V_sys`、`R_pin` 等裸下划线变量也必须转为 OMML 下标，不得作为普通文本残留。`.docx` 交付前必须运行 **`tools/qa_docx_math.py`**（`md_to_docx.py` 默认已执行）；若发现 `frac{`、`mathrm{`、`\(`、`\)`、`$`、`bare_subscript_identifier` 等残留或 manifest 编号/OMML 结构不一致，本轮不得作为定稿交付。
+当使用 `md_to_docx.py --math-manifest <manifest.yaml>` 时，转换阶段须按 manifest 中 `display` 公式顺序为未显式 `\tag{}` 的块级公式自动补右侧编号；这不是单纯 QA 参数，而是排版编号来源。
+
+DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML 级交付门禁：除公式外，还会检查未渲染 mermaid 源码（如 `flowchart TB`）、Consolas/代码样式残留、嵌入媒体数量不足等问题。主流程系统框图与流程图若有任一 mermaid 块渲染失败，`mermaid_render.py` 只写出 Markdown 排障稿，不得继续生成定稿 Word。若当前环境有 Word/LibreOffice，可额外导出 PDF/页面图做视觉 QA；若无，应在 `交底书交付检查记录.md` 中声明未做页面级视觉 QA，并建议人工打开 Word 复核图示缩放、表格换行和公式视觉效果。
 
 ### 常见任务与建议方式
 
@@ -59,7 +62,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 | PowerPoint（.pptx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/pptx_to_md.py --input {path}.pptx --output {dir}/{name}.md`；默认 `{name}_media/`；需 `pip install -r requirements.txt`（含 python-pptx）；**旧版 .ppt 不支持**，请先另存为 `.pptx`；图表/SmartArt 等若未以图片形状嵌入则可能仅能从备注或另行导出补全 |
 | 罗列目录、按名找文件 | 目录列举 / 按文件名搜索 |
 | 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：优先 **`Bash`** 运行 `cnipa_epub_search.py`；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**执行时须分多次调用**，**每次仅传一个**词块，**自行按 `pub_number` 合并**多轮 `EPUB_HITS_JSON`。CNIPA EPUB 输出默认是 `cnipa_result_page_parsed` 候选，`cnipa_qr_or_hint_url` 不得写作稳定 URL；高相关条目须用 `patent_link_verify.py` / Google Patents / Espacenet / WIPO / CNIPA PSS 复核。案件目录须用 `prior_art_dossier.py` 或等价手工留 `prior_art_dossier.*`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；异常或证据不足按 D/partial-D，不伪造可授权结论 |
-| 交底书定稿交付（**须同时** .md + .docx） | **3.2** 系统框图与 **3.4** 流程图均用 fenced ``mermaid``，**不要** ASCII 文字流程图/框图。定稿执行 **`tools/mermaid_render.py`**：mermaid 转 PNG（失败块保留围栏）后默认生成同名 **.docx**；**公式与符号在 Word 中必须为可编辑 OMML，不得用公式图片或代码样式**，如 `B_{s,t}^{tot}` 应写成公式而不是反引号代码；含关键公式时先建 formula manifest，并在 Word 生成后执行 **`tools/qa_docx_math.py <docx> --manifest <manifest.yaml>`**（`md_to_docx.py` 默认执行无 manifest QA）；QA 失败不得交付。详见 **`tools/README.md`** |
+| 交底书定稿交付（**须同时** .md + .docx） | **3.2** 系统框图与 **3.4** 流程图均用 fenced ``mermaid``，**不要** ASCII 文字流程图/框图。定稿执行 **`tools/mermaid_render.py`**：mermaid 转 PNG，所有块成功后默认生成同名 **.docx**；若任一块失败，只保留 Markdown 排障稿，**不得**生成定稿 Word。**公式与符号在 Word 中必须为可编辑 OMML，不得用公式图片或代码样式**，如 `B_{s,t}^{tot}` 应写成公式而不是反引号代码；含关键公式时先建 formula manifest，并在 Word 生成后执行 **`tools/qa_docx_math.py <docx> --manifest <manifest.yaml>`**（`md_to_docx.py` 默认执行无 manifest QA）；QA 会检查公式残留、未渲染 mermaid、Consolas 代码样式和嵌入媒体数量，失败不得交付。详见 **`tools/README.md`** |
 | 保存交底书路径 | 写入用户指定路径；未指定时可建议 `./outputs/{案件标识}/`；**凡交付的** `.md` / `.docx` 须为 **`{案件名}_{YYYYMMDDHHmmss}`**（§7.3 第 5 点，**含首次定稿与迭代**），勿默认覆盖旧稿；`outputs/` 整目录默认由 `.gitignore` 忽略 |
 | 迭代对话留档 | 每轮 **merger / correction** 交付后，在案件目录追加 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或等价手工），见 **`prompts/iteration_context.md`** |
 | 交付检查留档 | 每次向用户落盘交付 `.md`/`.docx` 后，在案件目录追加 **`交底书交付检查记录.md`**（**`tools/delivery_check_log.py`** 或等价手工），记录 PASS/WARN/FAIL、交付文件、待补项和检查摘要；见 **`disclosure_self_check.md` §8.5** |
@@ -125,7 +128,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 □ Step 5 已输出 A/B/C/D 查新结论、最小对比表和「可用区别特征」；高相关文献具备 `verification_status`，已用 `patent_link_verify.py` / 稳定公开页完成必要复核；已回写 Step 3–4 推荐方向
 □ 案件目录已生成或追加 `prior_art_dossier.json`/`.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；若阳性对照不足 3 条或关键文献未核验，本轮最高 D/partial-D，交付最高 WARN
 □ 除用户明确跳过外，完成摘要预览
-□ 主流程交底书已完成脱敏、mermaid（定稿均已渲染为 PNG）、章节引用符合 template_reference；含公式时 **3.4.1 符号表、formula manifest、§7.7 体例**（维度下标、无字母多义、LaTeX 分隔符统一）、**Word 可编辑 OMML 公式**（无公式图片、无代码样式符号）、**`qa_docx_math.py` PASS** 及 **3.5 符号列同形** 已满足
+□ 主流程交底书已完成脱敏、mermaid（定稿均已渲染为 PNG 且 DOCX media 数量满足预期）、章节引用符合 template_reference；含公式时 **3.4.1 符号表、formula manifest、§7.7 体例**（维度下标、无字母多义、LaTeX 分隔符统一）、**Word 可编辑 OMML 公式**（无公式图片、无代码样式符号）、**`qa_docx_math.py` PASS** 及 **3.5 符号列同形** 已满足；若无法做 Word/LibreOffice 页面级视觉 QA，已写入交付检查记录
 □ 结构有限辅助案件已按 `disclosure_self_check.md` §8.4 执行专项检查，并明确最高 WARN：正式附图、物理机理、创造性评估须由用户/代理人补足
 □ **已交付 .md 与 .docx**，且**文件名符合 §7.3 第 5 点**（**凡交付均含**时间戳后缀）；**正文无**技能/示例仓库类文末脚注
 □ 已按 `disclosure_self_check.md` §8.5 给出 PASS/WARN/FAIL；PASS 仅表示「代理人审稿就绪」，不表示可直接提交专利局；案件目录已追加 **`交底书交付检查记录.md`**
