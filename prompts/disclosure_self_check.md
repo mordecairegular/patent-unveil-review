@@ -41,6 +41,7 @@
 - [ ] **修订对话记录**：案件目录是否已追加 **`交底书修订对话记录.md`** 一条（含记录时间、用户说明摘要、本轮交付文件名、摘要摘录），见 **`iteration_context.md`**
 - [ ] **交付文件名**：凡落盘交付的交底书是否均为 **`{案件名}_{YYYYMMDDHHmmss}.md`** 及同名 `.docx`（§7.3 第 5 点，**含首次定稿与迭代**），未无故覆盖旧稿
 - [ ] **系统框图与流程图**：均为 fenced mermaid，定稿已用 `mermaid_render.py` 转 PNG，**无** ASCII 文字流程图/框图；`.md` 已交付，`.docx` 已生成或已按提示手动 `md_to_docx.py` 补全
+- [ ] **Word 公式可编辑**：`.docx` 中公式和符号为 Word 原生可编辑公式（OMML），**无**公式截图/公式 PNG；`B_{s,t}^{tot}` 等符号未使用反引号或等宽代码样式
 - [ ] 章节引用：如「详见 3.4.1」须指向真实存在的章节
 - [ ] **1.1 现有技术**：每个方向下列举的专利/文献是否均附有**来源状态**；写入正文的 URL 是否均为 `official_pss_verified`、`official_detail_opened`、`third_party_verified` 或 `npl_verified` 状态下实际打开且著录项一致的稳定 URL；是否与 `prior_art_search.md` 要求及 1.1「检索说明」自洽；**检索说明**是否**未**出现 `cnipa_epub_search.py`、WebSearch/降级等内部流程用语
 - [ ] **未核验来源**：是否不存在把 `http://epub.cnipa.gov.cn/patent/CN...`、二维码 title、搜索会话 URL 或其它未打开链接写成已核验公开源的情况；若存在关键未核验候选，是否已写入案件目录 `unverified_sources.md` 并在查新结论中降级为 D/partial-D 或提示 CNIPA PSS/代理人复核

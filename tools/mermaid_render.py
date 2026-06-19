@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-将 Markdown 中的 **mermaid** 围栏与（默认）**LaTeX 公式** 转为 PNG，再写定稿 `.md` 并默认生成 Word。
+将 Markdown 中的 **mermaid** 围栏转为 PNG，再写定稿 `.md` 并默认生成 Word。
 
-**公式**：默认先调用同目录 **`math_render.py`**（``matplotlib``；``--no-math`` 可跳过）。**Mermaid** 围栏块逐块渲染为 PNG，**保留** `` ```mermaid`` … `` ``` `` 源码，并在其后追加 HTML 注释
+**公式**：默认保留 Markdown/LaTeX 源码，由 ``md_to_docx.py`` 写入 Word 原生 OMML 可编辑公式；仅在显式传入 ``--math-png`` 时调用旧版 ``math_render.py`` 转 PNG。**Mermaid** 围栏块逐块渲染为 PNG，**保留** `` ```mermaid`` … `` ``` `` 源码，并在其后追加 HTML 注释
 ``<!-- ![图示](相对路径) -->``（预览不显示图），便于 ``md_to_docx.py`` 将图嵌入 Word（Word **仅**嵌 PNG，不写 mermaid 代码块）。
 
 **Mermaid 渲染后端（``mmdc``）**检测顺序见 ``_find_mmdc_invocation``：
@@ -362,9 +362,14 @@ def main(argv: list[str] | None = None) -> int:
         help="不生成 Word，仅输出替换图片后的 Markdown",
     )
     p.add_argument(
+        "--math-png",
+        action="store_true",
+        help="旧版兼容：将 LaTeX 公式预渲染为 PNG。默认不启用，Word 公式由 md_to_docx 写为可编辑 OMML。",
+    )
+    p.add_argument(
         "--no-math",
         action="store_true",
-        help="不渲染 LaTeX 公式（默认先 math_render 再 mermaid）",
+        help="兼容旧参数；当前默认已不预渲染公式 PNG。",
     )
     p.add_argument(
         "--math-assets-dir",
@@ -414,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
         md = in_path.read_text(encoding="utf-8", errors="replace")
 
     math_ok = math_fail = 0
-    if not getattr(args, "no_math", False):
+    if getattr(args, "math_png", False) and not getattr(args, "no_math", False):
         try:
             from math_render import render_markdown_math
 

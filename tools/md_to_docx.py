@@ -22,12 +22,14 @@
 from __future__ import annotations
 
 import argparse
+import html
 import re
 import sys
 from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
@@ -53,6 +55,54 @@ _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE = re.compile(
     r"\\\(((?:\\.|[^)])+?)\\\)\s*"
     r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
 )
+_INLINE_MATH_DOLLAR_RE = re.compile(
+    r"(?<!\$)\$(?!\$)((?:\\.|[^$\n])+?)\$(?!\$)"
+)
+_INLINE_MATH_PAREN_RE = re.compile(r"\\\(((?:\\.|[^)])+?)\\\)")
+_INLINE_TEX_TOKEN_RE = re.compile(
+    r"(?<![\w$])"
+    r"(?:"
+    r"\\[A-Za-z]+(?:_\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|_[A-Za-z0-9]+|\^\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\^[A-Za-z0-9]+)*"
+    r"|"
+    r"[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω]*_(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|[A-Za-z0-9Α-Ωα-ω]+)"
+    r"(?:_\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|_[A-Za-z0-9]+|\^\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\^[A-Za-z0-9Α-Ωα-ω]+)*"
+    r")"
+    r"(?![\w$])"
+)
+_SINGLE_LINE_BRACKET_MATH_RE = re.compile(r"^\\\[(.+)\\\]$")
+_SINGLE_LINE_DOLLAR_MATH_RE = re.compile(r"^\$\$(.+)\$\$$")
+_GREEK_AND_OPERATOR_COMMANDS = {
+    "alpha": "α",
+    "beta": "β",
+    "gamma": "γ",
+    "delta": "δ",
+    "eta": "η",
+    "theta": "θ",
+    "lambda": "λ",
+    "mu": "μ",
+    "rho": "ρ",
+    "sigma": "σ",
+    "phi": "φ",
+    "omega": "ω",
+    "Delta": "Δ",
+    "Sigma": "Σ",
+    "sum": "∑",
+    "prod": "∏",
+    "cdot": "·",
+    "times": "×",
+    "le": "≤",
+    "leq": "≤",
+    "leqslant": "≤",
+    "ge": "≥",
+    "geq": "≥",
+    "geqslant": "≥",
+    "neq": "≠",
+    "ne": "≠",
+    "approx": "≈",
+    "infty": "∞",
+    "min": "min",
+    "max": "max",
+}
 
 
 def _parse_hidden_image_comment(line: str) -> tuple[str, str] | None:
@@ -167,6 +217,154 @@ def _formula_image_kind(alt: str, src: str) -> str | None:
     return "block"
 
 
+def _normalise_math_text_fragment(text: str) -> str:
+    out = text
+    out = re.sub(r"\\(?:mathrm|text|operatorname)\{([^{}]+)\}", r"\1", out)
+    out = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"(\1)/(\2)", out)
+    out = out.replace(r"\left", "").replace(r"\right", "")
+    out = out.replace(r"\,", " ").replace(r"\;", " ").replace(r"\:", " ")
+    out = out.replace(r"\quad", " ").replace(r"\qquad", " ")
+    out = out.replace(r"\_", "_")
+    for cmd, value in sorted(_GREEK_AND_OPERATOR_COMMANDS.items(), key=lambda item: len(item[0]), reverse=True):
+        out = re.sub(rf"\\{cmd}(?![A-Za-z])", value, out)
+    return re.sub(r"\s+", " ", out)
+
+
+def _extract_formula_tag(text: str) -> tuple[str, str | None]:
+    match = re.search(r"\\tag\s*\{([^{}]+)\}", text)
+    if not match:
+        return text, None
+    cleaned = text[: match.start()] + text[match.end() :]
+    return cleaned.strip(), match.group(1).strip()
+
+
+def _strip_math_wrapper(text: str) -> str:
+    body = text.strip()
+    if body.startswith("$$") and body.endswith("$$") and len(body) >= 4:
+        return body[2:-2].strip()
+    if body.startswith("$") and body.endswith("$") and len(body) >= 2:
+        return body[1:-1].strip()
+    if body.startswith(r"\(") and body.endswith(r"\)"):
+        return body[2:-2].strip()
+    if body.startswith(r"\[") and body.endswith(r"\]"):
+        return body[2:-2].strip()
+    return body
+
+
+def _omml_run_xml(text: str) -> str:
+    escaped = html.escape(_normalise_math_text_fragment(text))
+    return (
+        "<m:r>"
+        '<m:rPr><m:sty m:val="p"/></m:rPr>'
+        f'<m:t xml:space="preserve">{escaped}</m:t>'
+        "</m:r>"
+    )
+
+
+def _read_script_arg(text: str, pos: int) -> tuple[str, int]:
+    if pos < len(text) and text[pos] == "{":
+        depth = 0
+        for idx in range(pos, len(text)):
+            if text[idx] == "{":
+                depth += 1
+            elif text[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[pos + 1 : idx], idx + 1
+        return text[pos + 1 :], len(text)
+    start = pos
+    while pos < len(text) and (text[pos].isalnum() or text[pos] in "\\,"):
+        pos += 1
+    return text[start:pos], pos
+
+
+def _normalise_math_atom(text: str) -> str:
+    cleaned = _normalise_math_text_fragment(text.strip())
+    if cleaned.startswith("\\"):
+        key = cleaned[1:]
+        return _GREEK_AND_OPERATOR_COMMANDS.get(key, key)
+    return cleaned
+
+
+def _structured_symbol_xml(text: str) -> str:
+    first_script = min(
+        [idx for idx in (text.find("_"), text.find("^")) if idx != -1],
+        default=len(text),
+    )
+    base = _normalise_math_atom(text[:first_script])
+    pos = first_script
+    subscript = None
+    superscript = None
+    while pos < len(text):
+        marker = text[pos]
+        if marker not in "_^":
+            break
+        value, pos = _read_script_arg(text, pos + 1)
+        if marker == "_":
+            subscript = _normalise_math_atom(value)
+        else:
+            superscript = _normalise_math_atom(value)
+
+    base_xml = _omml_run_xml(base)
+    if subscript is not None and superscript is not None:
+        return (
+            "<m:sSubSup>"
+            f"<m:e>{base_xml}</m:e>"
+            f"<m:sub>{_omml_run_xml(subscript)}</m:sub>"
+            f"<m:sup>{_omml_run_xml(superscript)}</m:sup>"
+            "</m:sSubSup>"
+        )
+    if subscript is not None:
+        return f"<m:sSub><m:e>{base_xml}</m:e><m:sub>{_omml_run_xml(subscript)}</m:sub></m:sSub>"
+    if superscript is not None:
+        return f"<m:sSup><m:e>{base_xml}</m:e><m:sup>{_omml_run_xml(superscript)}</m:sup></m:sSup>"
+    return base_xml
+
+
+def _omml_math_xml(text: str) -> str:
+    body, _tag = _extract_formula_tag(_strip_math_wrapper(text))
+    parts: list[str] = []
+    pos = 0
+    for match in _INLINE_TEX_TOKEN_RE.finditer(body):
+        if match.start() > pos:
+            parts.append(_omml_run_xml(body[pos : match.start()]))
+        parts.append(_structured_symbol_xml(match.group(0)))
+        pos = match.end()
+    if pos < len(body):
+        parts.append(_omml_run_xml(body[pos:]))
+    return (
+        '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+        + "".join(parts)
+        + "</m:oMath>"
+    )
+
+
+def _add_inline_omml_math(paragraph, text: str) -> None:
+    paragraph._element.append(parse_xml(_omml_math_xml(text)))
+
+
+def _add_math_block(doc: Document, text: str) -> None:
+    body, tag = _extract_formula_tag(_strip_math_wrapper(text))
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(3)
+    p.paragraph_format.space_after = Pt(6)
+    p.paragraph_format.keep_together = True
+    p._element.append(parse_xml(_omml_math_xml(body)))
+    if tag:
+        run = p.add_run(f"    ({tag})")
+        _set_run_font(run, "宋体", 10.5)
+
+
+def _looks_like_math_text(text: str) -> bool:
+    body = _strip_math_wrapper(text)
+    if not body:
+        return False
+    if _INLINE_TEX_TOKEN_RE.search(body):
+        return True
+    return bool(re.search(r"[A-Za-zΑ-Ωα-ω]", body) and re.search(r"(?:[_^]\{?|[=<>≤≥+\-*/]|\\(?:frac|sum|prod|min|max|cdot|leq|geq))", body))
+
+
 def _is_diagram_image(alt: str, src: str) -> bool:
     """mermaid 系统框图 / 流程图等（非公式，用全幅插图尺寸）。"""
     a = alt or ""
@@ -241,35 +439,13 @@ def _embed_from_image_ref(
 
 
 def _maybe_render_math_md(md_text: str, base_dir: Path) -> str:
-    """若含 LaTeX 公式则尝试调用 ``math_render``（已注释的 PNG 引用会跳过）。"""
-    if not re.search(r"\$\$|\\\[|\\\(|(?<!\$)\$(?!\$)", md_text):
-        return md_text
-    try:
-        from math_render import render_markdown_math
-    except ImportError:
-        print(
-            "[md_to_docx] 未安装 matplotlib，公式将按原文写入 Word",
-            file=sys.stderr,
-        )
-        return md_text
-    stub = base_dir / "_md_to_docx_math_stub.md"
-    new_md, ok, failed = render_markdown_math(
-        md_text,
-        out_md_path=stub,
-        assets_rel="math_figures",
-    )
-    if ok or failed:
-        print(
-            f"[md_to_docx] 公式渲染：{ok} 成功，{failed} 保留原文",
-            file=sys.stderr,
-        )
-    return new_md
+    """保留 Markdown 公式源码；写入 Word 时转为可编辑 OMML，而不是 PNG。"""
+    return md_text
 
 
 def _add_math_fallback_block(doc: Document, lines: list[str]) -> None:
-    """未渲染成功的 ``$$ ... $$`` 以等宽原文写入 Word。"""
-    body = [ln.rstrip("\n") for ln in lines]
-    _add_code_block(doc, ["$$", *body, "$$"])
+    """兼容旧调用名：块级公式写为 Word 原生 OMML。"""
+    _add_math_block(doc, "\n".join(ln.rstrip("\n") for ln in lines))
 
 
 def _embed_picture(
@@ -344,13 +520,25 @@ def _add_rich_content_to_paragraph(
     tokens: list[tuple[int, int, str, tuple]] = []
 
     for m in _INLINE_MATH_WITH_HIDDEN_IMG_RE.finditer(text):
-        tokens.append((m.start(), m.end(), "math_img", (m.group(2), m.group(3).strip())))
+        tokens.append((m.start(), m.end(), "math_omml", (m.group(1),)))
         taken.append((m.start(), m.end()))
 
     for m in _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE.finditer(text):
         if _span_overlaps(taken, m.start(), m.end()):
             continue
-        tokens.append((m.start(), m.end(), "math_img", (m.group(2), m.group(3).strip())))
+        tokens.append((m.start(), m.end(), "math_omml", (m.group(1),)))
+        taken.append((m.start(), m.end()))
+
+    for m in _INLINE_MATH_DOLLAR_RE.finditer(text):
+        if _span_overlaps(taken, m.start(), m.end()):
+            continue
+        tokens.append((m.start(), m.end(), "math_omml", (m.group(1),)))
+        taken.append((m.start(), m.end()))
+
+    for m in _INLINE_MATH_PAREN_RE.finditer(text):
+        if _span_overlaps(taken, m.start(), m.end()):
+            continue
+        tokens.append((m.start(), m.end(), "math_omml", (m.group(1),)))
         taken.append((m.start(), m.end()))
 
     for m in _HIDDEN_MD_IMAGE_COMMENT_RE.finditer(text):
@@ -386,6 +574,8 @@ def _add_rich_content_to_paragraph(
                 run = paragraph.add_run(token[1:-1])
                 _set_run_font(run, "Consolas", 9)
                 run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+        elif kind == "math_omml":
+            _add_inline_omml_math(paragraph, payload[0])
         else:
             alt, src = payload[0], payload[1]
             _embed_from_image_ref(
@@ -410,6 +600,51 @@ def _set_run_font(run, name: str = "宋体", size_pt: float | None = None, bold:
         run.font.bold = bold
 
 
+def _add_plain_run(paragraph, text: str, *, mono: bool = False) -> None:
+    if not text:
+        return
+    run = paragraph.add_run(text)
+    _set_run_font(run, "Consolas" if mono else "宋体", 10.5 if not mono else 9)
+    if mono:
+        run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+
+
+def _add_text_segment_with_math(paragraph, text: str, *, mono: bool = False) -> None:
+    if not text:
+        return
+    if mono:
+        _add_plain_run(paragraph, text, mono=True)
+        return
+
+    tokens: list[tuple[int, int, str]] = []
+    taken: list[tuple[int, int]] = []
+    for pattern in (_INLINE_MATH_DOLLAR_RE, _INLINE_MATH_PAREN_RE):
+        for match in pattern.finditer(text):
+            if _span_overlaps(taken, match.start(), match.end()):
+                continue
+            tokens.append((match.start(), match.end(), match.group(1)))
+            taken.append((match.start(), match.end()))
+    for match in _INLINE_TEX_TOKEN_RE.finditer(text):
+        if _span_overlaps(taken, match.start(), match.end()):
+            continue
+        tokens.append((match.start(), match.end(), match.group(0)))
+        taken.append((match.start(), match.end()))
+
+    if not tokens:
+        _add_plain_run(paragraph, text)
+        return
+
+    tokens.sort(key=lambda item: item[0])
+    pos = 0
+    for start, end, formula in tokens:
+        if start > pos:
+            _add_plain_run(paragraph, text[pos:start])
+        _add_inline_omml_math(paragraph, formula)
+        pos = end
+    if pos < len(text):
+        _add_plain_run(paragraph, text[pos:])
+
+
 def _add_inline_to_paragraph(paragraph, text: str, *, mono: bool = False):
     """解析 **粗体**、`行内代码` 与普通文本，写入同一段落。"""
     if not text:
@@ -419,20 +654,20 @@ def _add_inline_to_paragraph(paragraph, text: str, *, mono: bool = False):
     pos = 0
     for m in pattern.finditer(text):
         if m.start() > pos:
-            run = paragraph.add_run(text[pos : m.start()])
-            _set_run_font(run, "Consolas" if mono else "宋体", 10.5 if not mono else 9)
+            _add_text_segment_with_math(paragraph, text[pos : m.start()], mono=mono)
         token = m.group(1)
         if token.startswith("**"):
             run = paragraph.add_run(token[2:-2])
             _set_run_font(run, "宋体", 10.5, bold=True)
-        else:  # `code`
-            run = paragraph.add_run(token[1:-1])
-            _set_run_font(run, "Consolas", 9)
-            run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+        else:
+            inner = token[1:-1]
+            if not mono and _looks_like_math_text(inner):
+                _add_inline_omml_math(paragraph, inner)
+            else:
+                _add_plain_run(paragraph, inner, mono=True)
         pos = m.end()
     if pos < len(text):
-        run = paragraph.add_run(text[pos:])
-        _set_run_font(run, "Consolas" if mono else "宋体", 10.5 if not mono else 9)
+        _add_text_segment_with_math(paragraph, text[pos:], mono=mono)
 
 
 def _add_heading(doc: Document, level: int, text: str):
@@ -768,6 +1003,15 @@ def convert_md_to_docx(
             continue
 
         # 块级公式：\[ ... \] + 可选 HTML 注释
+        single_bracket_math = _SINGLE_LINE_BRACKET_MATH_RE.match(line.strip())
+        if single_bracket_math:
+            flush_paragraph()
+            _add_math_block(doc, single_bracket_math.group(1).strip())
+            i += 1
+            if i < len(lines) and _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip()):
+                i += 1
+            continue
+
         if line.strip() == "\\[":
             flush_paragraph()
             i += 1
@@ -777,28 +1021,23 @@ def convert_md_to_docx(
                 i += 1
             if i < len(lines):
                 i += 1
-            hidden: tuple[str, str] | None = None
             if i < len(lines):
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
                 if cm:
-                    hidden = (cm.group(1), cm.group(2).strip())
                     i += 1
-            if hidden and _formula_image_kind(*hidden):
-                ipath = _resolve_image_path(hidden[1], base_dir)
-                if ipath:
-                    _embed_from_image_ref(
-                        hidden[0],
-                        hidden[1],
-                        base_dir,
-                        doc=doc,
-                        image_max_w_in=image_max_w_in,
-                        image_max_h_in=image_max_h_in,
-                    )
-                    continue
-            _add_math_fallback_block(doc, ["\\[", *math_lines, "\\]"])
+            _add_math_block(doc, "\n".join(math_lines))
             continue
 
         # 块级公式：$$ ... $$ + 可选 HTML 注释（Word 嵌 PNG；预览见 LaTeX 原文）
+        single_dollar_math = _SINGLE_LINE_DOLLAR_MATH_RE.match(line.strip())
+        if single_dollar_math:
+            flush_paragraph()
+            _add_math_block(doc, single_dollar_math.group(1).strip())
+            i += 1
+            if i < len(lines) and _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip()):
+                i += 1
+            continue
+
         if line.strip() == "$$":
             flush_paragraph()
             i += 1
@@ -808,25 +1047,11 @@ def convert_md_to_docx(
                 i += 1
             if i < len(lines):
                 i += 1
-            hidden: tuple[str, str] | None = None
             if i < len(lines):
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
                 if cm:
-                    hidden = (cm.group(1), cm.group(2).strip())
                     i += 1
-            if hidden and _formula_image_kind(*hidden):
-                ipath = _resolve_image_path(hidden[1], base_dir)
-                if ipath:
-                    _embed_from_image_ref(
-                        hidden[0],
-                        hidden[1],
-                        base_dir,
-                        doc=doc,
-                        image_max_w_in=image_max_w_in,
-                        image_max_h_in=image_max_h_in,
-                    )
-                    continue
-            _add_math_fallback_block(doc, math_lines)
+            _add_math_block(doc, "\n".join(math_lines))
             continue
 
         # 独立 HTML 注释行（公式图 / mermaid 框图引用）
@@ -971,7 +1196,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--no-math-render",
         action="store_true",
-        help="不自动调用 math_render（默认会先渲染 $ / $$ 公式为 PNG）",
+        help="兼容旧参数；当前默认已不渲染公式图片，公式写为 Word 可编辑 OMML",
     )
     args = p.parse_args(argv)
 

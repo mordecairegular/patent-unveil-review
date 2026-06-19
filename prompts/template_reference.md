@@ -150,10 +150,12 @@ flowchart TB
 | CPU 维度权重 | \(b_{i,\mathrm{cpu}}\) | \(b_i^{cpu}\)（上标易被读作幂次） |
 | 节点饱和度 | \(a_{j,\mathrm{cpu}} \le 0\) | \(a_j^{cpu} \le 0\) |
 | 多维度并列 | \(b_{i,\mathrm{cpu}},\, b_{i,\mathrm{mem}}\) | \(b_i^{cpu}, b_i^{mem}\) |
-| 块级主公式 | `\[ M_{ij} = \alpha b_{i,\mathrm{cpu}} + \beta a_{j,\mathrm{cpu}} \tag{1} \]` 单行 | 块内多行 `\\` 换行堆叠（渲染易失败） |
+| 块级主公式 | \[ M_{ij} = \alpha b_{i,\mathrm{cpu}} + \beta a_{j,\mathrm{cpu}} \tag{1} \] 单行 | 块内多行 `\\` 换行堆叠（渲染易失败） |
 | 逻辑连接 | 公式外写「且 \(a_{j,\mathrm{mem}}\le 0\)」 | 公式内 `\text{且}` |
 
 **行内/块级分隔符**：全文统一 `\(...\)` / `\[...\]` **或** `$...$` / `$$...$$` 二选一；与 **`disclosure_builder.md` §7.7** 一致。
+
+**Word 交付要求**：`.docx` 中上述符号和公式应为可编辑公式（OMML），不要把公式做成图片，也不要把 `B_{s,t}^{tot}` 等符号用反引号或等宽代码样式输出。
 
 ### 3.5 关键技术参数
 
