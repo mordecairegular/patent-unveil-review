@@ -1,9 +1,6 @@
 ---
 name: patent-unveil-review
 description: "面向工程方法、软件系统、数据处理与控制测算类中国发明专利的授权可行性审查与技术交底书生成流程：扫描代码、算法、工程测算工具或方案文档，挖掘候选专利点，按技术问题、区别特征、技术效果、实施支撑和方案成熟度进行初筛，联网查新并回写风险等级，生成可供代理人审稿的交底书。结构/机械类专利仅提供有限辅助，需用户自备工程附图与物理机理依据。Use for engineering-method, software-system, data-processing, control, simulation, or calculation patentability review, prior-art search, disclosure drafting, and iterative attorney-review handoff."
-version: "3.0.0"
-user-invocable: true
-argument-hint: "[可选：项目路径或技术主题关键词]"
 allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 ---
 
@@ -18,6 +15,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 **v2.2 新增**：查新证据模型、来源状态分级、Google Patents 稳定页验证、阳性对照门禁、案件级 `prior_art_dossier` 留档；CNIPA EPUB 结果仅作候选发现，不再把二维码/猜测详情页当作可复核 URL。
 
 **v3.0 变更**：本技能取消此前“软件/结构双模式并列”设计，收缩为工程方法与软件系统类主流程。结构/机械类专利降为**有限辅助模式**：仅在用户已有 CAD/Visio 线稿或标注草图、明确物理机理，以及实验/仿真/标准/工程数据依据时，辅助文字撰写、附图标记一致性和权利要求格式检查；不承诺结构类专利点挖掘、创造性评估或 PASS 级交付。
+
+**v3.1 新增**：商业专利库辅助查新规则。壹专利 / 高数图可作为候选发现与内容检查渠道，记录为 `commercial_db_discovered` 或 `commercial_db_content_checked`；写入交底书公开引用前仍须通过 CNIPA PSS、Google Patents、Espacenet、WIPO 等公开来源形成 `public_source_verified` / 既有稳定来源状态。壹专利反查公开号时优先使用不带 A/B kind code 的公开号主干，并按 R0-R3 标注相关性。
 
 ## 环境与约定
 
@@ -57,7 +56,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 | Word（.docx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/docx_to_md.py --input {path}.docx --output {dir}/{name}.md`；图片默认写入与 `.md` 同级的 `{name}_media/`；需 `pip install -r requirements.txt`（含 mammoth）；复杂版式可改由所内导出 PDF/MD 再扫 |
 | PowerPoint（.pptx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/pptx_to_md.py --input {path}.pptx --output {dir}/{name}.md`；默认 `{name}_media/`；需 `pip install -r requirements.txt`（含 python-pptx）；**旧版 .ppt 不支持**，请先另存为 `.pptx`；图表/SmartArt 等若未以图片形状嵌入则可能仅能从备注或另行导出补全 |
 | 罗列目录、按名找文件 | 目录列举 / 按文件名搜索 |
-| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：优先 **`Bash`** 运行 `cnipa_epub_search.py`；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**执行时须分多次调用**，**每次仅传一个**词块，**自行按 `pub_number` 合并**多轮 `EPUB_HITS_JSON`。CNIPA EPUB 输出默认是 `cnipa_result_page_parsed` 候选，`cnipa_qr_or_hint_url` 不得写作稳定 URL；高相关条目须用 `patent_link_verify.py` / Google Patents / Espacenet / WIPO / CNIPA PSS 复核。案件目录须用 `prior_art_dossier.py` 或等价手工留 `prior_art_dossier.*`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；异常或证据不足按 D/partial-D，不伪造可授权结论 |
+| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：优先 **`Bash`** 运行 `cnipa_epub_search.py`；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**执行时须分多次调用**，**每次仅传一个**词块，**自行按 `pub_number` 合并**多轮 `EPUB_HITS_JSON`。CNIPA EPUB 输出默认是 `cnipa_result_page_parsed` 候选，`cnipa_qr_or_hint_url` 不得写作稳定 URL；高相关条目须用 `patent_link_verify.py` / Google Patents / Espacenet / WIPO / CNIPA PSS 复核。若用户已授权并打开学校远程访问页面，可将壹专利 / 高数图作为商业库发现和内容检查渠道，但只能标 `commercial_db_discovered` / `commercial_db_content_checked`，不得直接作为公开引用。案件目录须用 `prior_art_dossier.py` 或等价手工留 `prior_art_dossier.*`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；异常或证据不足按 D/partial-D，不伪造可授权结论 |
 | 交底书定稿交付（**须同时** .md + .docx） | **3.2** 系统框图与 **3.4** 流程图均用 fenced ``mermaid``，**不要** ASCII 文字流程图/框图。定稿执行 **`tools/mermaid_render.py`**：mermaid 转 PNG（失败块保留围栏）后默认生成同名 **.docx**；**公式与符号在 Word 中必须为可编辑 OMML，不得用公式图片或代码样式**，如 `B_{s,t}^{tot}` 应写成公式而不是反引号代码；若 Word 失败，按 stderr 提示手动运行 **`md_to_docx.py`**。详见 **`tools/README.md`** |
 | 保存交底书路径 | 写入用户指定路径；未指定时可建议 `./outputs/{案件标识}/`；**凡交付的** `.md` / `.docx` 须为 **`{案件名}_{YYYYMMDDHHmmss}`**（§7.3 第 5 点，**含首次定稿与迭代**），勿默认覆盖旧稿；`outputs/` 整目录默认由 `.gitignore` 忽略 |
 | 迭代对话留档 | 每轮 **merger / correction** 交付后，在案件目录追加 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或等价手工），见 **`prompts/iteration_context.md`** |
@@ -121,7 +120,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 □ 执行 merger / correction_handler 后，已在对话中输出该文件要求的留档摘要（合并摘要 / 纠正摘要）；案件目录已追加 **`交底书修订对话记录.md`**（或等价日志）
 □ Step 3–4 已完成授权可行性初筛；若「区别特征清晰度」「技术效果可论证性」或「方案成熟度」为 0–1 分，未直接推荐为主方向
 □ 查新完成且写入 1.1 与区别论述（符合 `prior_art_search.md`：**优先** `tools/cnipa_epub_search.py`，**国知局侧已分多次调用、每轮一词，并已自行合并** `EPUB_HITS_JSON`；**`abstract` 必用且已充分理解后再概括**；CNIPA EPUB 的 `cnipa_qr_or_hint_url` 只作提示，不写成稳定 URL）
-□ Step 5 已输出 A/B/C/D 查新结论、最小对比表和「可用区别特征」；高相关文献具备 `verification_status`，已用 `patent_link_verify.py` / 稳定公开页完成必要复核；已回写 Step 3–4 推荐方向
+□ Step 5 已输出 A/B/C/D 查新结论、最小对比表和「可用区别特征」；高相关文献具备 `verification_status`，商业库候选仅标 `commercial_db_discovered` / `commercial_db_content_checked`，写入交底书公开引用前已用 `patent_link_verify.py` / 稳定公开页 / 官方源完成必要复核；已回写 Step 3–4 推荐方向
 □ 案件目录已生成或追加 `prior_art_dossier.json`/`.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；若阳性对照不足 3 条或关键文献未核验，本轮最高 D/partial-D，交付最高 WARN
 □ 除用户明确跳过外，完成摘要预览
 □ 主流程交底书已完成脱敏、mermaid（定稿均已渲染为 PNG）、章节引用符合 template_reference；含公式时 **3.4.1 符号表、§7.7 体例**（维度下标、无字母多义、LaTeX 分隔符统一）、**Word 可编辑 OMML 公式**（无公式图片、无代码样式符号）及 **3.5 符号列同形** 已满足
