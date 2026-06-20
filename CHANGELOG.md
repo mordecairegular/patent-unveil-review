@@ -4,6 +4,17 @@
 
 ---
 
+## v3.1.0 (2026-06-20) - Commercial patent database assisted search
+
+- Added commercial patent database evidence states: `commercial_db_discovered`, `commercial_db_content_checked`, and `public_source_verified`.
+- Added strict rules for using 壹专利 / 高数图 as discovery and content-check channels only; commercial database session URLs and school VPN URLs must not be written as stable public citation links.
+- Added 壹专利 operating guidance based on validation: use publication-number stems such as `CN115360706` instead of `CN115360706B`, record hit counts and screenshots, and read details/claims for R2/R3 candidates when possible.
+- Added R0/R1/R2/R3 relevance grading for commercial database candidates.
+- Added platform safety boundaries: low-frequency, supervised use only; stop on CAPTCHA, risk-control, login, input, or submission failures; do not bypass access controls or scrape in bulk.
+- Clarified that commercial database content checks may support internal comparison and attorney communication, but candidates affecting A/B/C conclusions still require CNIPA PSS, Google Patents, Espacenet, WIPO, or another public source before being treated as public citations.
+
+---
+
 ## v3.0.2 (2026-06-19) - DOCX delivery QA hardening
 
 - Extended `qa_docx_math.py` from math-only QA into a DOCX delivery gate: it now reports embedded media count, Consolas/code-style runs, unrendered mermaid source residue, generic LaTeX command residue, and missing expected media.
