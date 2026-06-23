@@ -1,0 +1,94 @@
+# Patent disclosure formula manifest template.
+# Keep formula IDs stable;正文只引用 id/number，不临场重拼关键公式。
+
+- id: eq_energy_state
+  number: 1
+  title: 储能能量状态递推
+  display: true
+  latex: "B_{s,t}=B_{s,t-1}+\\eta_{\\mathrm{ch}}E_{s,t,\\mathrm{ch}}-\\frac{E_{s,t,\\mathrm{dis}}}{\\eta_{\\mathrm{dis}}}"
+  dimension_check: "kWh = kWh + kWh - kWh"
+  notes: "B 为储能能量状态，不直接称为无量纲 SOC。"
+
+- id: eq_energy_state_bounds
+  number: 2
+  title: 储能能量状态上下限
+  display: true
+  latex: "B_s^{\\min}\\leq B_{s,t}\\leq B_s^{\\max}"
+  dimension_check: "kWh <= kWh <= kWh"
+
+- id: eq_hourly_self_use
+  number: 3
+  title: 小时自用电量
+  display: true
+  latex: "W_{s,t,\\mathrm{self}}=E_{s,t,\\mathrm{direct}}+E_{s,t,\\mathrm{dis}}"
+  dimension_check: "kWh = kWh + kWh"
+
+- id: eq_annual_self_use
+  number: 4
+  title: 年度自用电量
+  display: true
+  latex: "W_{s,\\mathrm{self}}=\\sum_{t=1}^{T}W_{s,t,\\mathrm{self}}"
+  dimension_check: "kWh/year = sum(kWh)"
+
+- id: eq_annuity_factor
+  number: 5
+  title: 现值年金因子
+  display: true
+  latex: "\\Phi(r,Y)=\\sum_{y=1}^{Y}\\frac{1}{(1+r)^y}"
+  dimension_check: "dimensionless"
+
+- id: eq_first_boundary
+  number: 6
+  title: 电源侧第一边界
+  display: true
+  latex: "p_{\\min}(s)=\\frac{I_s/\\Phi(r,Y)+O_s-R_{s,\\mathrm{exp}}-R_{s,\\mathrm{env}}}{W_{s,\\mathrm{self}}}"
+  dimension_check: "元/kWh = 元/年 / kWh/年"
+
+- id: eq_base_cost
+  number: 7
+  title: 用电侧纯购网基准成本
+  display: true
+  latex: "C_{\\mathrm{base}}(s)=\\sum_{t=1}^{T}L_{s,t}\\pi_t"
+  dimension_check: "元/年 = sum(kWh * 元/kWh)"
+
+- id: eq_load_cost
+  number: 8
+  title: 候选配置后的用电侧成本
+  display: true
+  latex: "C_{\\mathrm{load}}(s,p)=(p+f_s)W_{s,\\mathrm{self}}+F_s^{\\mathrm{fix}}+\\sum_{t=1}^{T}E_{s,t,\\mathrm{grid}}\\pi_t"
+  dimension_check: "元/年 = 元/年 + 元/年 + 元/年"
+
+- id: eq_second_boundary_general
+  number: 9
+  title: 用电侧第二边界通式
+  display: true
+  latex: "p_{\\max}(s)=\\frac{C_{\\mathrm{base}}(s)-F_s^{\\mathrm{fix}}-\\sum_{t=1}^{T}E_{s,t,\\mathrm{grid}}\\pi_t}{W_{s,\\mathrm{self}}}-f_s"
+  dimension_check: "元/kWh"
+
+- id: eq_second_boundary_simplified
+  number: 10
+  title: 用电侧第二边界简化式
+  display: true
+  latex: "p_{\\max}(s)=\\frac{\\sum_{t=1}^{T}W_{s,t,\\mathrm{self}}\\pi_t}{W_{s,\\mathrm{self}}}-f_s"
+  dimension_check: "元/kWh"
+
+- id: eq_band_width
+  number: 11
+  title: 可行边界宽度
+  display: true
+  latex: "\\Delta p(s)=p_{\\max}(s)-p_{\\min}(s)"
+  dimension_check: "元/kWh"
+
+- id: eq_feasible_rule
+  number: 12
+  title: 可行性判定
+  display: true
+  latex: "\\Delta p(s)>0"
+  dimension_check: "元/kWh > 0"
+
+- id: eq_robust_band
+  number: 13
+  title: 鲁棒可行区间
+  display: true
+  latex: "[p_{\\min}^{\\mathrm{rob}}(s),p_{\\max}^{\\mathrm{rob}}(s)]=[\\max_{k\\in\\mathcal{K}}p_{\\min}^{(k)}(s),\\min_{k\\in\\mathcal{K}}p_{\\max}^{(k)}(s)]"
+  dimension_check: "元/kWh interval"

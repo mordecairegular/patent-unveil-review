@@ -37,7 +37,7 @@
 4. **验收「效果」**
 
    - 打开你指定的输出目录（如 `outputs/某练习目录/`，整目录不提交 Git），检查是否生成专利点、查新笔记、摘要预览、交底书（**Markdown + Word**，文件名含 **案件名 + 时间戳**）。
-   - 定稿须经 `tools/mermaid_render.py`（需 Node.js、`tools` 下可选 `npm install`，以及 `pip install -r requirements.txt`）。Word 失败时按脚本 stderr 手动执行 `md_to_docx.py`。详见 `tools/README.md`。
+   - 定稿须经 `tools/mermaid_render.py`（需 Node.js、`tools` 下可选 `npm install`，以及 `pip install -r requirements.txt`）。Word 生成或 DOCX 数学 QA 失败时须修正后重跑，不得交付失败 DOCX。详见 `tools/README.md`。
 
 5. **版本与迭代**
 

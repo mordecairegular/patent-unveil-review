@@ -4,6 +4,24 @@
 
 ---
 
+## v3.3.0 (2026-06-23) - Commercial database content-check workflow closure
+
+- Added `references/commercial_patent_db_verification.md` to define when Agent should actively use authorized 壹专利 / 高数图 sessions instead of leaving mechanical checks to the user or patent agent.
+- Clarified the boundary between `commercial_db_discovered`, `commercial_db_content_checked`, and `public_source_verified`.
+- Added disclosure wording rules for 1.1.2 / 1.1.3 after commercial database content checks are completed.
+- Added execution requirements: commercial database content checks must be written to the case evidence package, then reflected in the disclosure and regenerated DOCX.
+- Clarified that commercial database session URLs remain internal evidence only and must not be written as stable public citation URLs.
+
+---
+
+## v3.2.0 (2026-06-22) - Cross-case patent workflow lessons
+
+- Added `references/patent_workflow_lessons_ai_friendly.md` for cross-case workflow reuse.
+- Added guidance for new candidate pools, commercial database plus public-source search, GPT/Claude planning, engineering support artifacts, WARN/PASS delivery gates, and AI-friendly case directory structure.
+- Updated `SKILL.md` navigation so agents can load the workflow reference only when the task needs a complete patent-workflow run.
+
+---
+
 ## v3.1.0 (2026-06-20) - Commercial patent database assisted search
 
 - Added commercial patent database evidence states: `commercial_db_discovered`, `commercial_db_content_checked`, and `public_source_verified`.
@@ -12,6 +30,28 @@
 - Added R0/R1/R2/R3 relevance grading for commercial database candidates.
 - Added platform safety boundaries: low-frequency, supervised use only; stop on CAPTCHA, risk-control, login, input, or submission failures; do not bypass access controls or scrape in bulk.
 - Clarified that commercial database candidates affecting A/B/C conclusions must be rechecked through CNIPA PSS, Google Patents, Espacenet, WIPO, or another public source before entering disclosure section 1.1.
+
+---
+
+## v3.0.2 (2026-06-19) - DOCX delivery QA hardening
+
+- Extended `qa_docx_math.py` from math-only QA into a DOCX delivery gate: it now reports embedded media count, Consolas/code-style runs, unrendered mermaid source residue, generic LaTeX command residue, and missing expected media.
+- Added `md_to_docx.py --min-media-count` and `--allow-code-style` so final delivery can require rendered figures while still allowing diagnostic runs when needed.
+- Changed `mermaid_render.py` so a failed mermaid render still writes the Markdown troubleshooting draft but stops Word generation, preventing unrendered `flowchart TB` / mermaid code blocks from entering final DOCX.
+- Updated prompts and docs to require Word XML QA for formulas and diagrams, and to record when page-level Word/LibreOffice visual QA is unavailable.
+- Added regression tests for unrendered mermaid code blocks and missing expected DOCX media.
+
+---
+
+## v3.0.1 (2026-06-19) - DOCX formula subscript and numbering hardening
+
+- Fixed bare display formula lines such as `E(r) = V_sys / [r · ln(R_socket/R_pin)]` so `md_to_docx.py` upgrades them to block-level editable OMML instead of leaving underscore identifiers as visible text.
+- Fixed formulas followed by a standalone numbering line such as `(4)` so the number is folded into the formula block and rendered in the right-hand borderless-table numbering cell.
+- Fixed LaTeX parsing so `_` / `^` bind only to the final symbol in a plain run, preventing a full expression prefix from becoming the subscript base.
+- Added inline bare-subscript detection for prose next to Chinese text, so `V_sys为...` and `R_pin为...` become OMML subscripts instead of ordinary text.
+- Added manifest-driven auto-numbering: `md_to_docx.py --math-manifest` now assigns right-hand equation numbers to untagged display math blocks in manifest order before QA runs.
+- Added QA failure pattern `bare_subscript_identifier`; generated DOCX now fails when visible text still contains `V_sys`, `R_pin`, or similar raw underscore identifiers.
+- Added regression coverage for the screenshot-style formula line plus standalone number, and for QA rejection of bare underscore variables.
 
 ---
 

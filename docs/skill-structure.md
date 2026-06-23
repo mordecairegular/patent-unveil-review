@@ -23,9 +23,12 @@
 | `prompts/correction_handler.md` | 对话纠错与事实修正 |
 | `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、四客体模板 |
 | `references/method_system_patent_guide.md` | 工程方法与软件系统类专利撰写参考 |
+| `references/commercial_patent_db_verification.md` | 壹专利/高数图内容核验、来源状态和正文回写口径 |
+| `references/patent_workflow_lessons_ai_friendly.md` | 跨案件专利工作流沉淀和 AI 友好执行清单 |
 | `references/structural_patent_requirements.md` | 结构有限辅助参考，不用于创造性评估 |
 | `references/legal_sources.md` | 法源索引 |
 | `tools/` | CNIPA 查新、公开页验证、mermaid/DOCX 转换、dossier、交付日志等脚本 |
+| `templates/patent_formula_manifest.yaml` | 关键公式 manifest 模板，用于公式编号、量纲校核和 DOCX 数学 QA |
 | `examples/` | 脱敏示例原材料；正式输出应写入用户案件目录 |
 
 ## 用户产出约定
