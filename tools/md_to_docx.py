@@ -1579,6 +1579,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="要求 DOCX 至少嵌入 N 个 word/media 文件；用于确认 mermaid 图示已进入 Word",
     )
+    p.add_argument(
+        "--check-formal-text",
+        action="store_true",
+        help="检查正式交底书正文中是否残留流程说明、交接提示、Agent/脚本名或证据包说明",
+    )
     args = p.parse_args(argv)
 
     in_path = Path(args.input).resolve()
@@ -1622,6 +1627,7 @@ def main(argv: list[str] | None = None) -> int:
                 manifest_path=args.math_manifest,
                 allow_code_style=args.allow_code_style,
                 min_media_count=max(args.min_media_count, 0),
+                check_formal_text=args.check_formal_text,
             )
         except Exception as exc:
             print(f"DOCX 交付 QA 无法执行：{exc}", file=sys.stderr)

@@ -58,6 +58,58 @@ REGEX_FAIL_PATTERNS = [
     ),
 ]
 
+FORMAL_TEXT_FAIL_PATTERNS = [
+    "Word 交底书",
+    "标准 LaTeX 源",
+    "LaTeX 源写入中间稿",
+    "中间稿",
+    "公式编号作为正文标签管理",
+    "DOCX QA",
+    "案件证据包",
+    "详细检索记录",
+    "阳性对照",
+    "来源状态已另行",
+    "交底书正文仅摘录",
+    "不堆列第三方检索平台",
+    "商业库会话 URL",
+    "学校 VPN",
+    "session URL",
+    "壹专利已完成商业库内容核验",
+    "壹专利商业库完成内容核验",
+    "正式公开引用仍建议",
+    "稳定公开来源闭环",
+    "商业库仅作内部发现",
+    "query_log",
+    "prior_art_dossier",
+    "positive_controls",
+    "unverified_sources",
+    "commercial_db_discovered",
+    "commercial_db_content_checked",
+    "public_source_verified",
+    "qa_docx_math.py",
+    "md_to_docx.py",
+    "mermaid_render.py",
+    "cnipa_epub_search.py",
+    "patent_link_verify.py",
+]
+
+FORMAL_REGEX_FAIL_PATTERNS = [
+    (
+        "formal_word_latex_process_note",
+        re.compile(
+            r"为避免.*Word.*公式残片|以下公式.*LaTeX.*中间稿|在\s*Word\s*中转换为可编辑公式"
+        ),
+    ),
+    (
+        "formal_evidence_package_note",
+        re.compile(r"详细检索记录.*阳性对照.*来源状态|案件证据包|交接说明|交付检查记录"),
+    ),
+    (
+        "agent_or_tool_process_residue",
+        re.compile(r"\b(?:Agent|Codex|Claude|WebSearch|Playwright)\b"),
+    ),
+]
+
 
 @dataclass
 class ManifestFormula:
@@ -122,10 +174,17 @@ def _context(text: str, pattern: str) -> str:
     return text[start:end]
 
 
-def _scan_suspicious_text(visible_text: str, *, allow_dollar: bool) -> list[dict[str, str | int]]:
+def _scan_suspicious_text(
+    visible_text: str,
+    *,
+    allow_dollar: bool,
+    check_formal_text: bool,
+) -> list[dict[str, str | int]]:
     patterns = list(FAIL_PATTERNS)
     if not allow_dollar:
         patterns.append("$")
+    if check_formal_text:
+        patterns.extend(FORMAL_TEXT_FAIL_PATTERNS)
     failures: list[dict[str, str | int]] = []
     for pattern in patterns:
         count = visible_text.count(pattern)
@@ -137,7 +196,10 @@ def _scan_suspicious_text(visible_text: str, *, allow_dollar: bool) -> list[dict
                     "context": _context(visible_text, pattern),
                 }
             )
-    for label, regex in REGEX_FAIL_PATTERNS:
+    regex_patterns = list(REGEX_FAIL_PATTERNS)
+    if check_formal_text:
+        regex_patterns.extend(FORMAL_REGEX_FAIL_PATTERNS)
+    for label, regex in regex_patterns:
         matches = list(regex.finditer(visible_text))
         if matches:
             first = matches[0]
@@ -222,6 +284,7 @@ def check_docx_math(
     allow_dollar: bool = False,
     allow_code_style: bool = False,
     min_media_count: int = 0,
+    check_formal_text: bool = False,
 ) -> MathQaReport:
     docx = Path(docx_path)
     xml = _read_document_xml(docx)
@@ -232,7 +295,11 @@ def check_docx_math(
     code_style_count = xml.count("Consolas")
     word_auto_numbering_count = len(root.findall(".//w:numPr", NS))
 
-    failed_patterns = _scan_suspicious_text(visible_text, allow_dollar=allow_dollar)
+    failed_patterns = _scan_suspicious_text(
+        visible_text,
+        allow_dollar=allow_dollar,
+        check_formal_text=check_formal_text,
+    )
     formulas = _parse_manifest(Path(manifest_path) if manifest_path else None)
     expected_numbers = [
         f.number
@@ -333,6 +400,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="Require at least N embedded word/media files, useful after mermaid rendering",
     )
+    parser.add_argument(
+        "--check-formal-text",
+        action="store_true",
+        help="Fail on process/handoff/evidence-package text that must not appear in formal disclosure正文",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON report")
     args = parser.parse_args(argv)
 
@@ -343,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
             allow_dollar=args.allow_dollar,
             allow_code_style=args.allow_code_style,
             min_media_count=max(args.min_media_count, 0),
+            check_formal_text=args.check_formal_text,
         )
     except Exception as exc:
         print(f"FAIL\nerror: {exc}", file=sys.stderr)

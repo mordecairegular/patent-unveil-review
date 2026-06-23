@@ -142,7 +142,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
    python3 ${CLAUDE_SKILL_DIR}/tools/patent_link_verify.py --input "{EPUB_HITS_JSON或文件路径}"
    ```
 
-   输出 **`PATENT_LINKS_JSON:`**。其中 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新笔记和 1.1；`third_party_not_indexed`、`failed` 等不得写为已核验 URL。
+   输出 **`PATENT_LINKS_JSON:`**。其中 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新笔记、证据包或交接说明；正式 1.1 正文优先只写公开文献号、题名和技术对比。`third_party_not_indexed`、`failed` 等不得写为已核验 URL。
 2. **Espacenet / WIPO / Google Patents 页面检索**：当公开号 URL 未命中时，用标题、申请人、英文同义词、IPC/CPC 检索；能打开并匹配著录项时标为 `third_party_verified`。
 3. **新近 CN 公开号**：若 CNIPA EPUB 命中但 Google Patents 等尚未收录，不要删除该候选；标为 `cnipa_result_page_parsed + third_party_not_indexed`，进入未核验清单。若该条影响最终结论，触发人工/CNIPA PSS 复核。
 
@@ -216,27 +216,35 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 
 #### E.5 写入交底书规则
 
-- 交底书 1.1 正文只放公开稳定来源和简明结论。
-- 商业库发现但未公开核验的候选，写入 `unverified_sources.md` 或代理人内部备注，表述为“待 CNIPA PSS / 公开源复核”。
+- 交底书 1.1 正文只放公开文献标识、技术概括、局限和区别结论；平台、URL、来源状态和待复核说明放入证据包或交接说明。
+- 商业库发现但未公开核验的候选，写入 `unverified_sources.md` 或代理人内部备注，正文中不写商业库状态。
 - 商业库截图、学校 VPN URL、检索会话 URL 只能作内部证据，不得作为 `stable_url`。
 
-#### E.6 内容核验后的正文回写
+#### E.6 内容核验后的正文与交接分离
 
-用户已授权并打开壹专利/高数图，且本轮问题涉及“中国公开专利文献是否经专利平台查询确认”时，Agent 应主动完成可自动化的低频查询、详情读取和证据落盘，不得笼统回答“留给代理人/用户复核”。若已读取结果行、摘要、著录项/IPC 和权利要求页签，可将该文献标为 `commercial_db_content_checked`，并同步回写交底书 1.1.2、1.1.3 和待补充材料。
+用户已授权并打开壹专利/高数图，且本轮问题涉及“中国公开专利文献是否经专利平台查询确认”时，Agent 应主动完成可自动化的低频查询、详情读取和证据落盘，不得笼统回答“留给代理人/用户复核”。若已读取结果行、摘要、著录项/IPC 和权利要求页签，可将该文献标为 `commercial_db_content_checked`，但该状态只写入案件证据包、交接说明或交付检查记录；交底书正文只回写可用于区别论证的技术事实。
 
-推荐 1.1.2 说明句：
-
-```text
-下表中国公开专利文献已通过壹专利商业库完成内容核验，核验内容包括检索结果行、摘要、主著录项/IPC 分类号和权利要求页签；商业库会话 URL 仅作为内部查新证据，不作为正式公开引用来源。正式申请文件中的公开引用仍建议以 CNIPA PSS、中国专利公布公告或其他稳定公开来源闭环。
-```
-
-推荐表格状态列：
+正式交底书 1.1.2 推荐说明句：
 
 ```text
-壹专利已完成商业库内容核验；正式公开引用仍建议以 CNIPA PSS、中国专利公布公告或其他稳定公开来源闭环
+现有公开技术中，与本发明较为接近的方向包括……。下表列举的公开文献均涉及上述一个或多个方向，但其技术目标、处理对象或计算链条与本发明仍存在差异。
 ```
 
-只有在确实尚未完成商业库内容核验时，才写“商业库仅作内部发现或内容检查”。`commercial_db_content_checked` 可以支撑内部查新对比、代理人沟通和区别特征理解，但仍不得伪装成 `public_source_verified` 或正式法律检索意见。
+正式交底书表格推荐列：
+
+```text
+公开文献 | 技术方向 | 与本发明的接近点 | 与本发明的主要区别
+```
+
+禁止把以下内容写入 1.1.2 或 1.1.3 正文：
+
+- “下表中国公开专利文献已通过壹专利商业库完成内容核验……”
+- “商业库会话 URL 仅作为内部查新证据……”
+- “正式公开引用仍建议以 CNIPA PSS……闭环。”
+- “详细检索记录、阳性对照和来源状态已另行保存在案件证据包中……”
+- `commercial_db_discovered`、`commercial_db_content_checked`、`public_source_verified` 等来源状态标签。
+
+上述内容应写入 `prior_art_dossier.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`、交接说明或交付检查记录。`commercial_db_content_checked` 可以支撑内部查新对比、代理人沟通和区别特征理解，但仍不得伪装成 `public_source_verified` 或正式法律检索意见。
 
 ## 分析要求
 
@@ -329,9 +337,9 @@ A/B/C/D 还受来源状态约束：
 
 ## 记录习惯
 
-便于写进交底书：保留专利号、标题、**消化摘要后的**一两句方案概括（有 **`abstract`** 时概括须可追溯至该摘要）；每条另起一行或表格列给出「稳定 URL / 来源状态 / 待复核说明」。避免大段抄袭权利要求或整段粘贴官方摘要。
+便于写进交底书：保留专利号、标题、**消化摘要后的**一两句方案概括（有 **`abstract`** 时概括须可追溯至该摘要）。「稳定 URL / 来源状态 / 待复核说明」写入证据包或交接说明，不进入正式正文。避免大段抄袭权利要求或整段粘贴官方摘要。
 
-交底书 **1.1 正文**只放对代理人有用、可复核的稳定来源和简明结论；`query_log.md`、`prior_art_dossier.md`、`unverified_sources.md` 保留完整检索过程、失败来源和未核验候选。若某条文献未核验但必须提醒代理人关注，可写为“另有 CNIPA 公布公告结果页候选 CN...，尚待官方详情页复核”，不得附不可打开链接冒充证据。
+交底书 **1.1 正文**只放对代理人有用的公开文献标识、技术概括、局限和区别结论；`query_log.md`、`prior_art_dossier.md`、`unverified_sources.md` 保留完整检索过程、稳定 URL、来源状态、失败来源和未核验候选。若某条文献未核验但必须提醒代理人关注，写入交接说明或未核验清单，不要在正式正文附不可打开链接冒充证据。
 
 ### 1.1「检索说明」写法（交付正文，必遵）
 

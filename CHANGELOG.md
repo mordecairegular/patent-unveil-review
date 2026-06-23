@@ -4,6 +4,15 @@
 
 ---
 
+## v3.4.0 (2026-06-23) - Formal disclosure cleanliness gate
+
+- Added `references/formal_disclosure_cleanliness.md` to separate formal disclosure正文 from handoff notes, evidence packages, QA logs, and tool/process instructions.
+- Replaced commercial-database “正文推荐口径” with a technical-comparison-only 1.1.2 wording; commercial DB status, session URLs, query logs, and source-state explanations now belong in evidence/handoff artifacts.
+- Added `qa_docx_math.py --check-formal-text` and wired it into the formal `mermaid_render.py` DOCX path to catch Word/LaTeX intermediate-draft notes, evidence-package notes, commercial DB status text, Agent/tool names, and script-name residue.
+- Updated Step 5, Step 7, Step 8, README, and structure docs so formal `.md` / `.docx` deliverables do not contain self-referential workflow prose.
+
+---
+
 ## v3.3.0 (2026-06-23) - Commercial database content-check workflow closure
 
 - Added `references/commercial_patent_db_verification.md` to define when Agent should actively use authorized 壹专利 / 高数图 sessions instead of leaving mechanical checks to the user or patent agent.

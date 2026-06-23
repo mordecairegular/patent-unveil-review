@@ -55,8 +55,9 @@ def test_main_passes_rendered_mermaid_count_to_docx_qa(monkeypatch, tmp_path: Pa
     monkeypatch.setattr(mermaid_render, "_render_one_mermaid", ok_render)
     captured = {}
 
-    def fake_try_write_docx(_out_md, _docx_out, *, min_media_count=0):
+    def fake_try_write_docx(_out_md, _docx_out, *, min_media_count=0, check_formal_text=True):
         captured["min_media_count"] = min_media_count
+        captured["check_formal_text"] = check_formal_text
         return True
 
     monkeypatch.setattr(mermaid_render, "try_write_docx", fake_try_write_docx)
@@ -65,6 +66,7 @@ def test_main_passes_rendered_mermaid_count_to_docx_qa(monkeypatch, tmp_path: Pa
 
     assert code == 0
     assert captured["min_media_count"] == 1
+    assert captured["check_formal_text"] is True
     assert "![图示 1](mermaid_figures/fig_001.png)" in out.read_text(encoding="utf-8")
 
 

@@ -139,14 +139,14 @@ python3 tools/math_render.py -i draft.md -o out.md --assets-dir math_figures
 pip install -r requirements.txt
 ```
 
-依赖为 `python-docx`（见仓库根目录 `requirements.txt`）。保存 DOCX 后默认运行 `qa_docx_math.py`；正式交付不得使用 `--skip-math-qa` 或 `--allow-code-style`。
+依赖为 `python-docx`（见仓库根目录 `requirements.txt`）。保存 DOCX 后默认运行 `qa_docx_math.py`；正式交付不得使用 `--skip-math-qa` 或 `--allow-code-style`，并应使用 `--check-formal-text` 检查流程说明残留。通过 `mermaid_render.py` 生成定稿 Word 时默认开启该检查。
 
 ### 用法
 
 ```bash
 python3 tools/md_to_docx.py --input path/to/交底书.md --output path/to/交底书.docx
 python3 tools/md_to_docx.py -i path/to/交底书.md -o path/to/交底书.docx --math-manifest templates/patent_formula_manifest.yaml
-python3 tools/md_to_docx.py -i path/to/交底书.md -o path/to/交底书.docx --min-media-count 2
+python3 tools/md_to_docx.py -i path/to/交底书.md -o path/to/交底书.docx --min-media-count 2 --check-formal-text
 ```
 
 图片 `![](相对路径.png)`：默认相对 **Markdown 文件所在目录**；也可指定根目录：
@@ -196,6 +196,7 @@ python3 tools/md_to_docx.py -i a.md -o a.docx --image-max-width-inches 6 --image
 - `code_style_count`：检测 DOCX XML 中的 Consolas/代码样式；默认 FAIL，排障时可用 `--allow-code-style` 放行。
 - `word_auto_numbering_count`：检测 Word 自动编号结构 `<w:numPr>`；默认 FAIL，避免局部列表跨章节续号。
 - `suspicious_text_count` / `failed_patterns`：发现 `frac{`、`mathrm{`、`\(`、`\)`、`\[`、`\]`、`begin{`、`end{`、`$`、裸下划线变量、LaTeX 命令残留，或 `flowchart TB` / `graph TD` 等未渲染 mermaid 源码则 FAIL。
+- `--check-formal-text`：额外检查正式交底书正文中是否残留 Word/LaTeX 中间稿说明、DOCX QA 说明、案件证据包说明、商业库状态说明、Agent/脚本名等流程文字；正式交底书定稿必须开启。
 - `equation_number_count`：识别 `(1)`、`(2)` 等编号；传入 manifest 时检查缺失与重复。
 - 结构校验：manifest 中含 `\frac` 时要求 DOCX 内存在 `<m:f>`；含上下标时要求存在 OMML script 结构。
 
@@ -204,7 +205,7 @@ python3 tools/md_to_docx.py -i a.md -o a.docx --image-max-width-inches 6 --image
 ```bash
 python3 tools/qa_docx_math.py outputs/case/交底书.docx
 python3 tools/qa_docx_math.py outputs/case/交底书.docx --manifest outputs/case/formula_manifest.yaml
-python3 tools/qa_docx_math.py outputs/case/交底书.docx --manifest outputs/case/formula_manifest.yaml --min-media-count 2
+python3 tools/qa_docx_math.py outputs/case/交底书.docx --manifest outputs/case/formula_manifest.yaml --min-media-count 2 --check-formal-text
 python3 tools/qa_docx_math.py outputs/case/交底书.docx --json
 ```
 

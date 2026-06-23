@@ -269,6 +269,7 @@ def _print_manual_docx_hint(
     md_script: Path,
     *,
     min_media_count: int = 0,
+    check_formal_text: bool = True,
 ) -> None:
     print(
         "提示：可手动将上述 Markdown 转为 Word（需已 pip install -r requirements.txt）：",
@@ -287,6 +288,8 @@ def _print_manual_docx_hint(
         ]
         if min_media_count > 0:
             parts.extend(["--min-media-count", str(min_media_count)])
+        if check_formal_text:
+            parts.append("--check-formal-text")
         print("  " + " ".join(shlex.quote(p) for p in parts), file=sys.stderr)
     else:
         print(
@@ -295,7 +298,13 @@ def _print_manual_docx_hint(
         )
 
 
-def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) -> bool:
+def try_write_docx(
+    out_md: Path,
+    docx_out: Path,
+    *,
+    min_media_count: int = 0,
+    check_formal_text: bool = True,
+) -> bool:
     """
     调用同目录下的 md_to_docx.py。成功返回 True；失败或 DOCX 数学 QA 未通过时返回 False。
     """
@@ -312,6 +321,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -327,6 +337,8 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
     ]
     if min_media_count > 0:
         cmd.extend(["--min-media-count", str(min_media_count)])
+    if check_formal_text:
+        cmd.append("--check-formal-text")
     try:
         r = subprocess.run(
             cmd,
@@ -342,6 +354,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
     except OSError as e:
@@ -352,6 +365,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -366,6 +380,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -431,6 +446,11 @@ def main(argv: list[str] | None = None) -> int:
         default=1050,
         metavar="PX",
         help="mmdc -H：渲染视口高度像素（默认 1050）",
+    )
+    p.add_argument(
+        "--skip-formal-text-check",
+        action="store_true",
+        help="跳过正式正文清洁检查；仅用于诊断非正式中间稿，定稿交付不得使用",
     )
     args = p.parse_args(argv)
     if args.mmdc_scale <= 0:
@@ -513,7 +533,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.docx is not None
         else out_path.with_suffix(".docx")
     )
-    if not try_write_docx(out_path, docx_path, min_media_count=n_ok):
+    if not try_write_docx(
+        out_path,
+        docx_path,
+        min_media_count=n_ok,
+        check_formal_text=not args.skip_formal_text_check,
+    ):
         return 1
 
     return 0
