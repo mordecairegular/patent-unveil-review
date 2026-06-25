@@ -41,7 +41,7 @@
 <tr><td nowrap width="1%"><strong>项目扫描</strong></td><td>按优先级读文档 / 代码；<code>.docx</code> / <code>.pptx</code> 先转 Markdown 再扫（见 <code>prompts/project_scan.md</code>）</td></tr>
 <tr><td nowrap width="1%"><strong>专利点</strong></td><td>候选点讨论与融合，并按技术问题、区别特征、技术效果、实施支撑和方案成熟度做授权可行性初筛（<code>patent_points_analyzer.md</code>）</td></tr>
 <tr><td nowrap width="1%"><strong>查新</strong></td><td><strong>优先</strong> <a href="http://epub.cnipa.gov.cn/">国知局 · 中国专利公布公告</a>（<code>tools/cnipa_epub_search.py</code>）；异常或无果时降级 WebSearch（Google 学术 / Patents）。输出 A/B/C/D 风险等级、可用区别特征，并回写推荐方向（<code>prior_art_search.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>脱敏模版 + <strong>mermaid</strong> 系统框图与流程图；默认按方法 + 系统/装置 + 电子设备 + 存储介质组织保护点；<code>mermaid_render.py</code> → PNG，全部图示成功后默认再出 <strong>.docx</strong>；公式写为 Word 可编辑 OMML，并由 <code>qa_docx_math.py</code> 做残留 LaTeX、编号、未渲染 mermaid、代码样式和媒体嵌入检查</td></tr>
+<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>脱敏模版 + <strong>mermaid</strong> 系统框图与流程图；默认按方法 + 系统/装置 + 电子设备 + 存储介质组织保护点；<code>mermaid_render.py</code> → PNG，全部图示成功后默认再出 <strong>.docx</strong>；公式写为 Word 可编辑 OMML，并由 <code>qa_docx_math.py</code> 做残留 LaTeX、编号、未渲染 mermaid、代码样式、媒体嵌入和正式正文流程说明残留检查</td></tr>
 <tr><td nowrap width="1%"><strong>交付命名</strong></td><td>凡落盘交付：<code>{案件名}_{YYYYMMDDHHmmss}.md</code> 与同名 <code>.docx</code>（<code>disclosure_builder.md</code> §7.3）</td></tr>
 <tr><td nowrap width="1%"><strong>自检</strong></td><td>逻辑闭环、公式与参数一致、诚信非编造、PASS/WARN/FAIL 代理人审稿门禁（<code>disclosure_self_check.md</code>，不写入正文）</td></tr>
 <tr><td nowrap width="1%"><strong>迭代</strong></td><td><strong>合并</strong> / <strong>纠正</strong> 另存新文件；<code>交底书修订对话记录.md</code> 逐条追加（<code>iteration_context.md</code>、<code>iteration_dialog_log.py</code>）</td></tr>
@@ -137,7 +137,7 @@ patent-unveil-review/
 ├── tools/                      # mermaid_render、md_to_docx、docx_to_md、pptx_to_md；国知局 cnipa_epub_*；iteration_dialog_log、delivery_check_log 等
 ├── docs/                       # PRD、仓库结构说明
 ├── examples/                   # 原材料示例（如 example_batch_job_scheduler/knowledge/）
-├── references/                 # 工程方法/软件系统参考、结构有限辅助参考、法规来源索引
+├── references/                 # 工程方法/软件系统参考、商业库核验、跨案件工作流、结构有限辅助、法规来源索引
 ├── requirements.txt
 ├── LICENSE
 ├── INSTALL.md
@@ -160,6 +160,8 @@ patent-unveil-review/
 - [产品流程与目录约定](docs/PRD.md)
 - [工程结构说明](docs/skill-structure.md)
 - [工程方法与软件系统类专利撰写参考](references/method_system_patent_guide.md)
+- [商业专利库内容核验与来源状态](references/commercial_patent_db_verification.md)
+- [跨案件专利工作流沉淀](references/patent_workflow_lessons_ai_friendly.md)
 - [交底书模版细则](prompts/template_reference.md)
 
 ---

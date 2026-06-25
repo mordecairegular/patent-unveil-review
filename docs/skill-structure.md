@@ -23,6 +23,9 @@
 | `prompts/correction_handler.md` | 对话纠错与事实修正 |
 | `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、四客体模板 |
 | `references/method_system_patent_guide.md` | 工程方法与软件系统类专利撰写参考 |
+| `references/commercial_patent_db_verification.md` | 壹专利/高数图内容核验、来源状态、正文与交接说明分离 |
+| `references/formal_disclosure_cleanliness.md` | 正式交底书正文清洁规则，防止流程说明、工具说明和证据状态进入正文 |
+| `references/patent_workflow_lessons_ai_friendly.md` | 跨案件专利工作流沉淀和 AI 友好执行清单 |
 | `references/structural_patent_requirements.md` | 结构有限辅助参考，不用于创造性评估 |
 | `references/legal_sources.md` | 法源索引 |
 | `tools/` | CNIPA 查新、公开页验证、mermaid/DOCX 转换、dossier、交付日志等脚本 |

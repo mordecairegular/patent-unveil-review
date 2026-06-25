@@ -117,6 +117,27 @@ def test_docx_math_qa_fails_on_bare_subscript_identifier(tmp_path: Path) -> None
     assert any(item["pattern"] == "bare_subscript_identifier" for item in report.failed_patterns)
 
 
+def test_docx_formal_text_qa_fails_on_process_notes(tmp_path: Path) -> None:
+    doc = Document()
+    doc.add_paragraph(
+        "为避免 Word 交底书中出现公式残片，以下公式均以标准 LaTeX 源写入中间稿。"
+    )
+    doc.add_paragraph(
+        "详细检索记录、阳性对照和来源状态已另行保存在案件证据包中。"
+    )
+    out = tmp_path / "bad_formal_text.docx"
+    doc.save(out)
+
+    report = check_docx_math(out, check_formal_text=True)
+
+    assert not report.passed
+    assert any(
+        item["pattern"] == "formal_word_latex_process_note"
+        for item in report.failed_patterns
+    )
+    assert any(item["pattern"] == "案件证据包" for item in report.failed_patterns)
+
+
 def test_docx_delivery_qa_fails_on_unrendered_mermaid_code_block(tmp_path: Path) -> None:
     doc = convert_md_to_docx(
         "```mermaid\nflowchart TB\nA[输入] --> B[输出]\n```\n",

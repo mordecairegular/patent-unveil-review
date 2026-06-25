@@ -55,8 +55,9 @@ def test_main_passes_rendered_mermaid_count_to_docx_qa(monkeypatch, tmp_path: Pa
     monkeypatch.setattr(mermaid_render, "_render_one_mermaid", ok_render)
     captured = {}
 
-    def fake_try_write_docx(_out_md, _docx_out, *, min_media_count=0):
+    def fake_try_write_docx(_out_md, _docx_out, *, min_media_count=0, check_formal_text=True):
         captured["min_media_count"] = min_media_count
+        captured["check_formal_text"] = check_formal_text
         return True
 
     monkeypatch.setattr(mermaid_render, "try_write_docx", fake_try_write_docx)
@@ -65,4 +66,29 @@ def test_main_passes_rendered_mermaid_count_to_docx_qa(monkeypatch, tmp_path: Pa
 
     assert code == 0
     assert captured["min_media_count"] == 1
-    assert "<!-- ![图示 1](mermaid_figures/fig_001.png) -->" in out.read_text(encoding="utf-8")
+    assert captured["check_formal_text"] is True
+    assert "![图示 1](mermaid_figures/fig_001.png)" in out.read_text(encoding="utf-8")
+
+
+def test_existing_hidden_mermaid_comment_is_normalized_to_visible_image(monkeypatch, tmp_path: Path) -> None:
+    src = tmp_path / "draft.md"
+    out = tmp_path / "一种测试方法及系统_20260619000002.md"
+    src.write_text(
+        "```mermaid\nflowchart TB\nA --> B\n```\n<!-- ![图示 1](mermaid_figures/fig_001.png) -->\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(mermaid_render, "_find_mmdc_invocation", lambda: (["mmdc"], False))
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("existing rendered figure should not be re-rendered")
+
+    monkeypatch.setattr(mermaid_render, "_render_one_mermaid", fail_if_called)
+    monkeypatch.setattr(mermaid_render, "try_write_docx", lambda *args, **kwargs: True)
+
+    code = mermaid_render.main(["-i", str(src), "-o", str(out)])
+
+    text = out.read_text(encoding="utf-8")
+    assert code == 0
+    assert "![图示 1](mermaid_figures/fig_001.png)" in text
+    assert "<!-- ![图示 1]" not in text

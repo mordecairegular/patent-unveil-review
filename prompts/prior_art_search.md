@@ -41,6 +41,11 @@
 |------|------------------|------|
 | `official_pss_verified` | 是 | CNIPA 专利检索及分析系统中已人工/浏览器复核著录项和详情 |
 | `official_detail_opened` | 是 | 官方详情页已实际打开并核验标题/公开号/摘要 |
+| `official_cnipa_epub_detail_opened` | 是 | CNIPA 公布公告 / EPUB 官方详情页已实际打开并核验标题、公开号、申请号等著录项；不是 PSS 复核 |
+| `official_egaz_page_images_archived` | 是 | EGAZ 官方预览页图已归档，可用于人工核对权利要求/说明书图像；不是原始 PDF 下载文本 |
+| `official_claims_transcribed_from_page_images` | 是 | 权利要求已从官方页图人工转写并复核；应保留页图路径和转写责任，不等同可复制官方文本 |
+| `official_pdf_download_captcha_pending` | 否 | EGAZ / 官方原始 PDF 下载仍受验证码或登录阻断；不得写成已取得原始 PDF |
+| `official_pss_blocked_in_current_environment` | 否 | PSS 在当前网络/浏览器/代理环境中被 412、空白页、登录、验证码或 WAF 阻断；不得写成 PSS 已核验 |
 | `third_party_verified` | 是 | Google Patents、Espacenet、WIPO、出版社/DOI 等稳定页已打开且著录项匹配 |
 | `npl_verified` | 是 | 非专利文献稳定来源已打开且题名/作者/摘要匹配 |
 | `cnipa_result_page_parsed` | 否 | 仅从 CNIPA 公布公告结果页解析到候选；可用于发现，不可单独支撑最终结论 |
@@ -137,7 +142,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
    python3 ${CLAUDE_SKILL_DIR}/tools/patent_link_verify.py --input "{EPUB_HITS_JSON或文件路径}"
    ```
 
-   输出 **`PATENT_LINKS_JSON:`**。其中 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新笔记和 1.1；`third_party_not_indexed`、`failed` 等不得写为已核验 URL。
+   输出 **`PATENT_LINKS_JSON:`**。其中 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新笔记、证据包或交接说明；正式 1.1 正文优先只写公开文献号、题名和技术对比。`third_party_not_indexed`、`failed` 等不得写为已核验 URL。
 2. **Espacenet / WIPO / Google Patents 页面检索**：当公开号 URL 未命中时，用标题、申请人、英文同义词、IPC/CPC 检索；能打开并匹配著录项时标为 `third_party_verified`。
 3. **新近 CN 公开号**：若 CNIPA EPUB 命中但 Google Patents 等尚未收录，不要删除该候选；标为 `cnipa_result_page_parsed + third_party_not_indexed`，进入未核验清单。若该条影响最终结论，触发人工/CNIPA PSS 复核。
 
@@ -161,9 +166,15 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 - 用户要求更高标准的正式查新支撑。
 - 最终要给 PASS 且核心区别特征高度依赖某几篇近似专利。
 
+国内官方站点访问注意：
+
+- CNIPA PSS、EPUB、EGAZ 等国内官方站点可能被学校 WebVPN、全局 VPN、海外代理、系统代理或内置浏览器链路破坏，典型表现为 `HTTP 412`、空白 DOM、脚本资源缺失、验证码异常或下载接口失败。此时不要把失败解释为“该专利不存在”。
+- 若 PSS 在当前环境被阻断，应记录 `official_pss_blocked_in_current_environment`，并建议用户在本机 Chrome/Edge 中关闭全局 VPN/代理，或对 `*.cnipa.gov.cn`、`*.cponline.cnipa.gov.cn` 设置 DIRECT，必要时用国内手机热点直连后人工下载/截图。
+- 若 CNIPA EPUB 官方详情页和 EGAZ 官方页图已经取得，可按实际情况记录 `official_cnipa_epub_detail_opened`、`official_egaz_page_images_archived`、`official_claims_transcribed_from_page_images`；但仍不得写成 `official_pss_verified`，也不得把页图重建 PDF 写成验证码下载的原始 PDF。
+
 ### E. 商业专利库辅助检索（壹专利 / 高数图）
 
-商业专利库可作为**候选发现、结果聚类、权利要求快速阅读和内部对比**渠道，但不得直接等同公开稳定引用源。`commercial_db_content_checked` 不是“不可靠”，而是“已完成内部内容核验、但不宜把商业库会话 URL 当作公开引用 URL”。只有在公开来源完成复核后，候选才能作为交底书 1.1 的公开引用。
+商业专利库可作为**候选发现、结果聚类、权利要求快速阅读和内部对比**渠道，但不得直接等同公开稳定引用源。只有在公开来源完成复核后，候选才能写入交底书 1.1 的公开引用。
 
 #### E.1 使用边界
 
@@ -181,7 +192,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 | 状态 | 用途 | 公开引用 |
 |------|------|----------|
 | `commercial_db_discovered` | 商业库结果列表发现候选，已记录检索式、命中数、列表字段和截图编号 | 否 |
-| `commercial_db_content_checked` | 已在商业库详情页读取摘要、著录项/IPC、权利要求或说明书要点 | 否 |
+| `commercial_db_content_checked` | 已在商业库详情页读取摘要、著录项、IPC/CPC、权利要求或说明书要点 | 否 |
 | `public_source_verified` | 已用 CNIPA PSS / Google Patents / Espacenet / WIPO 等公开来源核验 | 是 |
 
 #### E.3 壹专利操作规则
@@ -205,10 +216,35 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 
 #### E.5 写入交底书规则
 
-- 交底书 1.1 的 `stable_url`、`link` 和公开引用字段只放公开稳定来源。
-- 商业库发现但未公开核验的候选，写入 `unverified_sources.md` 或代理人内部备注，表述为“待 CNIPA PSS / 公开源复核”。
-- 商业库已完成内容核验时，可在 1.1 的检索说明或表格备注中写明“已通过壹专利 / 高数图商业库完成内部内容核验；商业库会话 URL 仅作内部查新证据，不作为正式公开引用来源”。不得把该表述升级为法律检索结论。
+- 交底书 1.1 正文只放公开文献标识、技术概括、局限和区别结论；平台、URL、来源状态和待复核说明放入证据包或交接说明。
+- 商业库发现但未公开核验的候选，写入 `unverified_sources.md` 或代理人内部备注，正文中不写商业库状态。
 - 商业库截图、学校 VPN URL、检索会话 URL 只能作内部证据，不得作为 `stable_url`。
+
+#### E.6 内容核验后的正文与交接分离
+
+用户已授权并打开壹专利/高数图，且本轮问题涉及“中国公开专利文献是否经专利平台查询确认”时，Agent 应主动完成可自动化的低频查询、详情读取和证据落盘，不得笼统回答“留给代理人/用户复核”。若已读取结果行、摘要、著录项/IPC 和权利要求页签，可将该文献标为 `commercial_db_content_checked`，但该状态只写入案件证据包、交接说明或交付检查记录；交底书正文只回写可用于区别论证的技术事实。
+
+正式交底书 1.1.2 推荐说明句：
+
+```text
+现有公开技术中，与本发明较为接近的方向包括……。下表列举的公开文献均涉及上述一个或多个方向，但其技术目标、处理对象或计算链条与本发明仍存在差异。
+```
+
+正式交底书表格推荐列：
+
+```text
+公开文献 | 技术方向 | 与本发明的接近点 | 与本发明的主要区别
+```
+
+禁止把以下内容写入 1.1.2 或 1.1.3 正文：
+
+- “下表中国公开专利文献已通过壹专利商业库完成内容核验……”
+- “商业库会话 URL 仅作为内部查新证据……”
+- “正式公开引用仍建议以 CNIPA PSS……闭环。”
+- “详细检索记录、阳性对照和来源状态已另行保存在案件证据包中……”
+- `commercial_db_discovered`、`commercial_db_content_checked`、`public_source_verified` 等来源状态标签。
+
+上述内容应写入 `prior_art_dossier.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`、交接说明或交付检查记录。`commercial_db_content_checked` 可以支撑内部查新对比、代理人沟通和区别特征理解，但仍不得伪装成 `public_source_verified` 或正式法律检索意见。
 
 ## 分析要求
 
@@ -218,7 +254,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 - 技术方案要点（**若为国知局 JSON 且含 `abstract`，要点须与摘要理解一致**，见上文「`abstract` 必用」）
 - 应用场景
 - **局限性**
-- **来源状态（必填）**：每一条必须写明 `verification_status`。只有 `official_pss_verified`、`official_detail_opened`、`third_party_verified`、`npl_verified`、`public_source_verified` 可写稳定公开 URL；其它状态须写入未核验清单，不得伪装为已核验链接。
+- **来源状态（必填）**：每一条必须写明 `verification_status`。只有 `official_pss_verified`、`official_detail_opened`、`third_party_verified`、`npl_verified` 可写稳定公开 URL；其它状态须写入未核验清单，不得伪装为已核验链接。
 
 ### 最小对比表（必做）
 
@@ -269,9 +305,9 @@ verification_time
 
 A/B/C/D 还受来源状态约束：
 
-- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；商业库 `commercial_db_content_checked` 可作为内部对比支撑，但不能替代公开源复核；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。
+- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。
 - C：可以基于稳定来源确认“高度相似”或“区别特征弱”；若高度相似文献仅有未核验候选，不应直接判 C，应判 D/partial-D 并要求复核。
-- D：出现以下任一情形即为 D 或 partial-D：关键文献不可核验、只有 CNIPA EPUB 结果页候选、只有商业库发现/内容核验而缺少公开源复核、正负样本不足、检索式过窄/过宽、CNIPA/PSS 登录或验证码阻断、稳定来源标题/摘要冲突、无法说明 18 个月公开盲区外的检索覆盖。
+- D：出现以下任一情形即为 D 或 partial-D：关键文献不可核验、只有 CNIPA EPUB 结果页候选、正负样本不足、检索式过窄/过宽、CNIPA/PSS 登录或验证码阻断、稳定来源标题/摘要冲突、无法说明 18 个月公开盲区外的检索覆盖。
 - 不得把“某个检索词超时/0 命中”写成“没有相关现有技术”；应记录为该检索词失败或无结果，并换词/换源补检。
 
 ### 链接来源与格式（须准确）
@@ -279,9 +315,8 @@ A/B/C/D 还受来源状态约束：
 | 类型 | 推荐 URL 形式 | 说明 |
 |------|----------------|------|
 | 美国等专利（公开出版物号） | `https://patents.google.com/patent/US20240118920A1/en` | 将 `US20240118920A1` 替换为实际公开号；以 Google Patents 页面能打开且标题/摘要匹配为准。 |
-| 中国专利 | **`https://patents.google.com/patent/CNXXXXXXXXXA/zh`** 或 `/en`；官方 PSS 已复核时可写官方稳定入口/截图编号 | **禁止**把 `http://epub.cnipa.gov.cn/patent/CN...`、二维码 title、商业库/学校 VPN 会话 URL 写成稳定 URL。Google Patents 未收录的新近公开须列入未核验清单。 |
+| 中国专利 | **`https://patents.google.com/patent/CNXXXXXXXXXA/zh`** 或 `/en`；官方 PSS 已复核时可写官方稳定入口/截图编号 | **禁止**把 `http://epub.cnipa.gov.cn/patent/CN...`、二维码 title、会话 URL 写成稳定 URL。Google Patents 未收录的新近公开须列入未核验清单。 |
 | CNIPA EPUB 候选 | 不写入稳定 URL；只写 `cnipa_qr_or_hint_url` | 仅表示从官方公布公告结果页解析到候选，不代表详情页已打开。 |
-| 商业专利库候选 | 不写入稳定 URL；只写平台、检索式、截图编号、内容核验状态 | 壹专利 / 高数图可记录为 `commercial_db_discovered` 或 `commercial_db_content_checked`，但须公开源复核后才可作为公开引用。 |
 | 学术论文（含 Scholar） | Scholar 条目页、出版社官方页或 **`https://doi.org/10.xxxx/...`** | Scholar 链接若重定向或镜像，以最终可长期解析的 DOI/出版社页为准。 |
 | arXiv 预印本 | `https://arxiv.org/abs/2008.09213` | `abs` 页为规范条目页；勿用未经验证的镜像域名冒充官方。 |
 | 期刊 / 会议 | 出版社 DOI：`https://doi.org/10.xxxx/...` 或官方摘要页 | 以 DOI 解析后页面与文献一致为准。 |
@@ -302,17 +337,16 @@ A/B/C/D 还受来源状态约束：
 
 ## 记录习惯
 
-便于写进交底书：保留专利号、标题、**消化摘要后的**一两句方案概括（有 **`abstract`** 时概括须可追溯至该摘要）；每条另起一行或表格列给出「稳定 URL / 来源状态 / 待复核说明」。避免大段抄袭权利要求或整段粘贴官方摘要。
+便于写进交底书：保留专利号、标题、**消化摘要后的**一两句方案概括（有 **`abstract`** 时概括须可追溯至该摘要）。「稳定 URL / 来源状态 / 待复核说明」写入证据包或交接说明，不进入正式正文。避免大段抄袭权利要求或整段粘贴官方摘要。
 
-交底书 **1.1 正文**只放对代理人有用、可复核的稳定来源和简明结论；商业库内容核验可作为“内部内容核验状态”说明，不得写成公开引用 URL 或法律复核结论。`query_log.md`、`prior_art_dossier.md`、`unverified_sources.md` 保留完整检索过程、失败来源和未核验候选。若某条文献未核验但必须提醒代理人关注，可写为“另有 CNIPA 公布公告结果页 / 商业库候选 CN...，尚待官方详情页或公开源复核”，不得附不可打开链接冒充证据。
+交底书 **1.1 正文**只放对代理人有用的公开文献标识、技术概括、局限和区别结论；`query_log.md`、`prior_art_dossier.md`、`unverified_sources.md` 保留完整检索过程、稳定 URL、来源状态、失败来源和未核验候选。若某条文献未核验但必须提醒代理人关注，写入交接说明或未核验清单，不要在正式正文附不可打开链接冒充证据。
 
 ### 1.1「检索说明」写法（交付正文，必遵）
 
 写入交底书 **1.1** 开头的「检索说明」时，面向**代理人/审查员**表述，**不要**暴露 Agent 查新流程或本仓库工具实现。
 
-- **须写**：实际使用的**公开数据库或渠道名称**（如「国家知识产权局专利公布公告系统」「Google Patents」「Espacenet」「Google Scholar」）、本案**主要检索词**（与 Step 5 用词一致或概括）；若使用壹专利 / 高数图完成内部内容核验，可写明“商业库仅作内部内容核验，不作为公开引用 URL”；若部分条目经 **Google Patents** 等公开页复核著录项，可一句带过。
+- **须写**：实际使用的**公开数据库或渠道名称**（如「国家知识产权局专利公布公告系统」「Google Patents」「Espacenet」「Google Scholar」）、本案**主要检索词**（与 Step 5 用词一致或概括）；若部分条目经 **Google Patents** 等公开页复核著录项，可一句带过。
 - **须诚实说明**：若存在关键未核验候选或第三方未收录新近 CN 文献，1.1 中用简短句子提示“尚待 CNIPA PSS/代理人复核”，不要把 D/partial-D 包装成确定结论。
-- **可写商业库内容核验**：当商业库已读过检索结果行、摘要、IPC/著录项和权利要求页签时，可写“相关中国公开专利文献已通过壹专利 / 高数图商业库完成内部内容核验；商业库会话 URL 仅作内部查新证据，正式公开引用仍以 CNIPA PSS、中国专利公布公告、Google Patents、Espacenet、WIPO 等公开来源闭环为准”。
 - **禁止写入 1.1 正文**：脚本/文件名（如 **`cnipa_epub_search.py`**、**`cnipa_epub_crawler.py`**）、「查新优先使用…检索工具」「是否触发 Google 学术降级」、Playwright、WebSearch、Agent、技能仓库名等**内部或流程元信息**。
 - **示例（须按本案替换检索词与渠道）**：
 

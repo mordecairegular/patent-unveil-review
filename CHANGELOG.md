@@ -4,6 +4,33 @@
 
 ---
 
+## v3.4.0 (2026-06-23) - Formal disclosure cleanliness gate
+
+- Added `references/formal_disclosure_cleanliness.md` to separate formal disclosure正文 from handoff notes, evidence packages, QA logs, and tool/process instructions.
+- Replaced commercial-database “正文推荐口径” with a technical-comparison-only 1.1.2 wording; commercial DB status, session URLs, query logs, and source-state explanations now belong in evidence/handoff artifacts.
+- Added `qa_docx_math.py --check-formal-text` and wired it into the formal `mermaid_render.py` DOCX path to catch Word/LaTeX intermediate-draft notes, evidence-package notes, commercial DB status text, Agent/tool names, and script-name residue.
+- Updated Step 5, Step 7, Step 8, README, and structure docs so formal `.md` / `.docx` deliverables do not contain self-referential workflow prose.
+
+---
+
+## v3.3.0 (2026-06-23) - Commercial database content-check workflow closure
+
+- Added `references/commercial_patent_db_verification.md` to define when Agent should actively use authorized 壹专利 / 高数图 sessions instead of leaving mechanical checks to the user or patent agent.
+- Clarified the boundary between `commercial_db_discovered`, `commercial_db_content_checked`, and `public_source_verified`.
+- Added disclosure wording rules for 1.1.2 / 1.1.3 after commercial database content checks are completed.
+- Added execution requirements: commercial database content checks must be written to the case evidence package, then reflected in the disclosure and regenerated DOCX.
+- Clarified that commercial database session URLs remain internal evidence only and must not be written as stable public citation URLs.
+
+---
+
+## v3.2.0 (2026-06-22) - Cross-case patent workflow lessons
+
+- Added `references/patent_workflow_lessons_ai_friendly.md` for cross-case workflow reuse.
+- Added guidance for new candidate pools, commercial database plus public-source search, GPT/Claude planning, engineering support artifacts, WARN/PASS delivery gates, and AI-friendly case directory structure.
+- Updated `SKILL.md` navigation so agents can load the workflow reference only when the task needs a complete patent-workflow run.
+
+---
+
 ## v3.1.0 (2026-06-20) - Commercial patent database assisted search
 
 - Added commercial patent database evidence states: `commercial_db_discovered`, `commercial_db_content_checked`, and `public_source_verified`.
@@ -11,7 +38,7 @@
 - Added 壹专利 operating guidance based on validation: use publication-number stems such as `CN115360706` instead of `CN115360706B`, record hit counts and screenshots, and read details/claims for R2/R3 candidates when possible.
 - Added R0/R1/R2/R3 relevance grading for commercial database candidates.
 - Added platform safety boundaries: low-frequency, supervised use only; stop on CAPTCHA, risk-control, login, input, or submission failures; do not bypass access controls or scrape in bulk.
-- Clarified that commercial database content checks may support internal comparison and attorney communication, but candidates affecting A/B/C conclusions still require CNIPA PSS, Google Patents, Espacenet, WIPO, or another public source before being treated as public citations.
+- Clarified that commercial database candidates affecting A/B/C conclusions must be rechecked through CNIPA PSS, Google Patents, Espacenet, WIPO, or another public source before entering disclosure section 1.1.
 
 ---
 

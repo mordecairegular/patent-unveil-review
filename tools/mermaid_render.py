@@ -2,8 +2,8 @@
 """
 将 Markdown 中的 **mermaid** 围栏转为 PNG，再写定稿 `.md` 并默认生成 Word。
 
-**公式**：默认保留 Markdown/LaTeX 源码，由 ``md_to_docx.py`` 写入 Word 原生 OMML 可编辑公式；仅在显式传入 ``--math-png`` 时调用旧版 ``math_render.py`` 转 PNG。**Mermaid** 围栏块逐块渲染为 PNG，**保留** `` ```mermaid`` … `` ``` `` 源码，并在其后追加 HTML 注释
-``<!-- ![图示](相对路径) -->``（预览不显示图），便于 ``md_to_docx.py`` 将图嵌入 Word（Word **仅**嵌 PNG，不写 mermaid 代码块）。
+**公式**：默认保留 Markdown/LaTeX 源码，由 ``md_to_docx.py`` 写入 Word 原生 OMML 可编辑公式；仅在显式传入 ``--math-png`` 时调用旧版 ``math_render.py`` 转 PNG。**Mermaid** 围栏块逐块渲染为 PNG，**保留** `` ```mermaid`` … `` ``` `` 源码，并在其后追加可见 Markdown 图片引用
+``![图示](相对路径)``，便于 Markdown 预览与 ``md_to_docx.py`` 同时显示/嵌入图示（Word **仅**嵌 PNG，不写 mermaid 代码块）。
 
 **Mermaid 渲染后端（``mmdc``）**检测顺序见 ``_find_mmdc_invocation``：
 1. ``tools/node_modules``（``npm install`` 官方 ``@mermaid-js/mermaid-cli``）；
@@ -151,17 +151,17 @@ def _render_one_mermaid(
 
 _MMD_START = re.compile(r"^```mermaid\s*$", re.IGNORECASE)
 _MMD_END = re.compile(r"^```\s*$")
-_MERMAID_HIDDEN_COMMENT_RE = re.compile(
-    r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
+_MERMAID_IMAGE_REF_RE = re.compile(
+    r"^(?:<!--\s*)?!\[([^\]]*)\]\(([^)]+)\)(?:\s*-->)?$"
 )
 
 
-def _is_mermaid_figure_comment(alt: str, src: str) -> bool:
+def _is_mermaid_figure_ref(alt: str, src: str) -> bool:
     s = src.strip().replace("\\", "/")
     if "mermaid_figures" in s:
         return True
     a = alt.strip()
-    return a.startswith("图示") or a.startswith("图 ")
+    return a.startswith("图示") or a.startswith("图")
 
 
 def render_markdown_mermaid(
@@ -177,8 +177,8 @@ def render_markdown_mermaid(
     返回 (新 markdown 全文, 成功转为 PNG 的块数, 生图失败而保留围栏的块数)。
     资源目录为 out_md_path.parent / assets_rel。
     失败的块原样写回 `` ```mermaid`` … `` ``` ``，不抛错。
-    成功的块写回围栏源码 + 紧随其后的 ``<!-- ![图示](…) -->``（与 ``math_render`` 保留 LaTeX 原文同理）。
-    若围栏后已有 mermaid 图示注释，则视为已处理，原样跳过（可重复跑脚本）。
+    成功的块写回围栏源码 + 紧随其后的可见 ``![图示](…)``。
+    若围栏后已有 mermaid 图示引用，则视为已处理并规范为可见图片行（可重复跑脚本）。
     """
     lines = md_text.splitlines(keepends=True)
     out: list[str] = []
@@ -202,13 +202,13 @@ def render_markdown_mermaid(
             if i < len(lines):
                 i += 1
 
-            # 已定稿：围栏 + 图示注释，不重复渲染
+            # 已定稿：围栏 + 图示引用，不重复渲染；兼容旧版隐藏 HTML 注释并转为可见图片。
             j = i
             while j < len(lines) and lines[j].strip() == "":
                 j += 1
             if j < len(lines):
-                cm = _MERMAID_HIDDEN_COMMENT_RE.match(lines[j].strip())
-                if cm and _is_mermaid_figure_comment(cm.group(1), cm.group(2)):
+                cm = _MERMAID_IMAGE_REF_RE.match(lines[j].strip())
+                if cm and _is_mermaid_figure_ref(cm.group(1), cm.group(2)):
                     out.append(fence_open)
                     out.extend(body)
                     if not closing.endswith("\n"):
@@ -217,8 +217,8 @@ def render_markdown_mermaid(
                     while i < j:
                         out.append(lines[i])
                         i += 1
-                    out.append(lines[i])
-                    i += 1
+                    out.append(f"![{cm.group(1)}]({cm.group(2)})\n")
+                    i = j + 1
                     ok += 1
                     continue
 
@@ -254,7 +254,7 @@ def render_markdown_mermaid(
             if not closing.endswith("\n"):
                 closing = closing + "\n"
             out.append(closing)
-            out.append(f"<!-- ![图示 {ok}]({rel}) -->\n")
+            out.append(f"![图示 {ok}]({rel})\n")
             continue
         out.append(line)
         i += 1
@@ -269,6 +269,7 @@ def _print_manual_docx_hint(
     md_script: Path,
     *,
     min_media_count: int = 0,
+    check_formal_text: bool = True,
 ) -> None:
     print(
         "提示：可手动将上述 Markdown 转为 Word（需已 pip install -r requirements.txt）：",
@@ -287,6 +288,8 @@ def _print_manual_docx_hint(
         ]
         if min_media_count > 0:
             parts.extend(["--min-media-count", str(min_media_count)])
+        if check_formal_text:
+            parts.append("--check-formal-text")
         print("  " + " ".join(shlex.quote(p) for p in parts), file=sys.stderr)
     else:
         print(
@@ -295,7 +298,13 @@ def _print_manual_docx_hint(
         )
 
 
-def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) -> bool:
+def try_write_docx(
+    out_md: Path,
+    docx_out: Path,
+    *,
+    min_media_count: int = 0,
+    check_formal_text: bool = True,
+) -> bool:
     """
     调用同目录下的 md_to_docx.py。成功返回 True；失败或 DOCX 数学 QA 未通过时返回 False。
     """
@@ -312,6 +321,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -327,6 +337,8 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
     ]
     if min_media_count > 0:
         cmd.extend(["--min-media-count", str(min_media_count)])
+    if check_formal_text:
+        cmd.append("--check-formal-text")
     try:
         r = subprocess.run(
             cmd,
@@ -342,6 +354,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
     except OSError as e:
@@ -352,6 +365,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -366,6 +380,7 @@ def try_write_docx(out_md: Path, docx_out: Path, *, min_media_count: int = 0) ->
             base_dir,
             md_script,
             min_media_count=min_media_count,
+            check_formal_text=check_formal_text,
         )
         return False
 
@@ -431,6 +446,11 @@ def main(argv: list[str] | None = None) -> int:
         default=1050,
         metavar="PX",
         help="mmdc -H：渲染视口高度像素（默认 1050）",
+    )
+    p.add_argument(
+        "--skip-formal-text-check",
+        action="store_true",
+        help="跳过正式正文清洁检查；仅用于诊断非正式中间稿，定稿交付不得使用",
     )
     args = p.parse_args(argv)
     if args.mmdc_scale <= 0:
@@ -513,7 +533,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.docx is not None
         else out_path.with_suffix(".docx")
     )
-    if not try_write_docx(out_path, docx_path, min_media_count=n_ok):
+    if not try_write_docx(
+        out_path,
+        docx_path,
+        min_media_count=n_ok,
+        check_formal_text=not args.skip_formal_text_check,
+    ):
         return 1
 
     return 0

@@ -676,7 +676,7 @@ def _is_diagram_image(alt: str, src: str) -> bool:
     s = src.replace("\\", "/")
     if "mermaid_figures" in s:
         return True
-    if a.startswith("图示") or a.startswith("图 "):
+    if a.startswith("图示") or a.startswith("图"):
         return True
     return False
 
@@ -1037,13 +1037,20 @@ def _add_list_item(
     base_dir: Path | None,
     *,
     image_max_h_in: float = _DEFAULT_IMAGE_MAX_H_IN,
+    marker: str | None = None,
 ):
-    style = "List Number" if ordered else "List Bullet"
-    try:
-        p = doc.add_paragraph(style=style)
-    except (KeyError, ValueError):
+    if ordered:
+        # Avoid Word auto-numbering continuing across independent disclosure sections.
         p = doc.add_paragraph()
         p.paragraph_format.left_indent = Inches(0.35)
+        p.paragraph_format.first_line_indent = Inches(-0.25)
+        text = f"{marker or '1.'} {text}"
+    else:
+        try:
+            p = doc.add_paragraph(style="List Bullet")
+        except (KeyError, ValueError):
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Inches(0.35)
     p.paragraph_format.space_after = Pt(3)
     if (
         _MD_IMAGE_RE.search(text)
@@ -1323,13 +1330,17 @@ def convert_md_to_docx(
                 i += 1
             if i < len(lines):
                 i += 1
-            # 定稿 MD 保留 mermaid 源码 + 图示注释：Word 只嵌 PNG，不写源码块
+            # 定稿 MD 保留 mermaid 源码 + 图示引用：Word 只嵌 PNG，不写源码块。
+            # 兼容旧版隐藏 HTML 注释和新版可见 Markdown 图片行。
             if fence_lang.lower() == "mermaid":
                 j = i
                 while j < len(lines) and lines[j].strip() == "":
                     j += 1
                 if j < len(lines):
-                    cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[j].strip())
+                    stripped_after_fence = lines[j].strip()
+                    cm = _HIDDEN_MD_IMAGE_COMMENT_RE.fullmatch(stripped_after_fence)
+                    if not cm:
+                        cm = _MD_IMAGE_RE.fullmatch(stripped_after_fence)
                     if cm and _is_diagram_image(cm.group(1), cm.group(2).strip()):
                         continue
             _add_code_block(doc, code_lines)
@@ -1497,15 +1508,16 @@ def convert_md_to_docx(
             continue
 
         # 有序列表
-        om = re.match(r"^(\s*)\d+\.\s+(.+)$", line)
+        om = re.match(r"^(\s*)(\d+\.)\s+(.+)$", line)
         if om:
             flush_paragraph()
             _add_list_item(
                 doc,
-                om.group(2).strip(),
+                om.group(3).strip(),
                 ordered=True,
                 base_dir=base_dir,
                 image_max_h_in=image_max_h_in,
+                marker=om.group(2),
             )
             i += 1
             continue
@@ -1567,6 +1579,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="要求 DOCX 至少嵌入 N 个 word/media 文件；用于确认 mermaid 图示已进入 Word",
     )
+    p.add_argument(
+        "--check-formal-text",
+        action="store_true",
+        help="检查正式交底书正文中是否残留流程说明、交接提示、Agent/脚本名或证据包说明",
+    )
     args = p.parse_args(argv)
 
     in_path = Path(args.input).resolve()
@@ -1610,6 +1627,7 @@ def main(argv: list[str] | None = None) -> int:
                 manifest_path=args.math_manifest,
                 allow_code_style=args.allow_code_style,
                 min_media_count=max(args.min_media_count, 0),
+                check_formal_text=args.check_formal_text,
             )
         except Exception as exc:
             print(f"DOCX 交付 QA 无法执行：{exc}", file=sys.stderr)
