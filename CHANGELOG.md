@@ -14,6 +14,7 @@
 - Gate 4 checklist in `disclosure_preview.md`: title length, mainline naturalness, protection-combination preference, confidentiality boundary (details the user does not want published), quantitative-effect softening, embodiment demotion.
 - PSS boundary statement in `prior_art_search.md` §D: PSS is CNIPA's official search data source, not an official patentability endorsement; sign-off = user's/agent's internal confirmation of the evidence-based go/no-go conclusion.
 - Post-case domain-pack backfill guidance (lexicon, negative-example library, verified-active applicants, cross-case claim forbidden-zone registry); domain-pack contents stay in the user's project directory — never committed to this public repository.
+- Codex cross-review fixes (6/6 adopted): gate-2 → Step 3–4 lightweight integration handoff (topic card = candidate-point dossier, no re-mining); `A-探针`/`B-探针` probe-grade suffix separated from case-level A/B gates (positive controls ≥3, source-state); gate-3 minimal sign-off record fields in `prior_art_search.md`; gate-4 explicit skip-release logging; dual entries renamed 材料入口/冷启动入口 (avoid A/B letter collision with search grades); `needs_human_auth` clarified as an operational flag, not a `verification_status` value; user final review confirms business/material boundary only, never re-grades evidence levels.
 
 ---
 
