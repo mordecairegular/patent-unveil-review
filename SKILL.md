@@ -24,6 +24,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 **v3.4 新增**：正式交底书正文清洁门禁。Word/LaTeX 中间稿、DOCX QA、案件证据包、商业库核验状态、检索过程、Agent/脚本名等流程说明只能写入交接说明、交付检查记录或证据包，不得进入正式 `.md` / `.docx` 正文。详见 **`references/formal_disclosure_cleanliness.md`**。
 
+**v3.5 新增**：查新渠道环境自适应与 Google Patents XHR 补充检索。`tools/channel_preflight.py` 环境预检（一行 `CHANNEL_STATUS_JSON`，记入 `query_log.md`）；`tools/gp_xhr_search.py` 补 CNIPA EPUB「仅首页 ~10 条/词」覆盖短板（发现级 `google_xhr_search_result`）。CNIPA 侧脚本须在用户本机执行，云沙箱阻断属环境状态而非查新结论；`cnipa_epub_search.py` 已支持 `--help` 等标准参数。详见 **`prompts/prior_art_search.md` §A2**。
+
 ## 环境与约定
 
 - **语言**：默认与用户语种一致；专利与法律术语采用行业常用表述。
@@ -73,7 +75,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 | Word（.docx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/docx_to_md.py --input {path}.docx --output {dir}/{name}.md`；图片默认写入与 `.md` 同级的 `{name}_media/`；需 `pip install -r requirements.txt`（含 mammoth）；复杂版式可改由所内导出 PDF/MD 再扫 |
 | PowerPoint（.pptx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/pptx_to_md.py --input {path}.pptx --output {dir}/{name}.md`；默认 `{name}_media/`；需 `pip install -r requirements.txt`（含 python-pptx）；**旧版 .ppt 不支持**，请先另存为 `.pptx`；图表/SmartArt 等若未以图片形状嵌入则可能仅能从备注或另行导出补全 |
 | 罗列目录、按名找文件 | 目录列举 / 按文件名搜索 |
-| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：优先 **`Bash`** 运行 `cnipa_epub_search.py`；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**执行时须分多次调用**，**每次仅传一个**词块，**自行按 `pub_number` 合并**多轮 `EPUB_HITS_JSON`。CNIPA EPUB 输出默认是 `cnipa_result_page_parsed` 候选，`cnipa_qr_or_hint_url` 不得写作稳定 URL；高相关条目须用 `patent_link_verify.py` / Google Patents / Espacenet / WIPO / CNIPA PSS 复核。若用户已授权并打开学校远程访问页面，可将壹专利 / 高数图作为商业库发现和内容检查渠道，但只能标 `commercial_db_discovered` / `commercial_db_content_checked`，不得直接作为公开引用。案件目录须用 `prior_art_dossier.py` 或等价手工留 `prior_art_dossier.*`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；异常或证据不足按 D/partial-D，不伪造可授权结论 |
+| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：优先 **`Bash`** 运行 `cnipa_epub_search.py`；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**执行时须分多次调用**，**每次仅传一个**词块，**自行按 `pub_number` 合并**多轮 `EPUB_HITS_JSON`。CNIPA EPUB 输出默认是 `cnipa_result_page_parsed` 候选，`cnipa_qr_or_hint_url` 不得写作稳定 URL；高相关条目须用 `patent_link_verify.py` / Google Patents / Espacenet / WIPO / CNIPA PSS 复核。若用户已授权并打开学校远程访问页面，可将壹专利 / 高数图作为商业库发现和内容检查渠道，但只能标 `commercial_db_discovered` / `commercial_db_content_checked`，不得直接作为公开引用。案件目录须用 `prior_art_dossier.py` 或等价手工留 `prior_art_dossier.*`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；异常或证据不足按 D/partial-D，不伪造可授权结论。环境不确定或 EPUB 失败时先跑 **`tools/channel_preflight.py`**（`CHANNEL_STATUS_JSON` 记入 `query_log.md`）；覆盖补强/环境降级用 **`tools/gp_xhr_search.py`**（发现级 `google_xhr_search_result`，高相关须复核）；渠道失败记**环境状态**，不得写成检索无结果 |
 | 交底书定稿交付（**须同时** .md + .docx） | **3.2** 系统框图与 **3.4** 流程图均用 fenced ``mermaid``，**不要** ASCII 文字流程图/框图。定稿执行 **`tools/mermaid_render.py`**：mermaid 转 PNG，所有块成功后默认生成同名 **.docx**；若任一块失败，只保留 Markdown 排障稿，**不得**生成定稿 Word。**公式与符号在 Word 中必须为可编辑 OMML，不得用公式图片或代码样式**，如 `B_{s,t}^{tot}` 应写成公式而不是反引号代码；含关键公式时先建 formula manifest，并在 Word 生成后执行 **`tools/qa_docx_math.py <docx> --manifest <manifest.yaml> --check-formal-text`**（`mermaid_render.py` 默认执行正式正文清洁 QA）；QA 会检查公式残留、未渲染 mermaid、Consolas 代码样式、嵌入媒体数量和流程说明残留，失败不得交付。详见 **`tools/README.md`** |
 | 保存交底书路径 | 写入用户指定路径；未指定时可建议 `./outputs/{案件标识}/`；**凡交付的** `.md` / `.docx` 须为 **`{案件名}_{YYYYMMDDHHmmss}`**（§7.3 第 5 点，**含首次定稿与迭代**），勿默认覆盖旧稿；`outputs/` 整目录默认由 `.gitignore` 忽略 |
 | 迭代对话留档 | 每轮 **merger / correction** 交付后，在案件目录追加 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或等价手工），见 **`prompts/iteration_context.md`** |
@@ -142,6 +144,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 □ 执行 merger / correction_handler 后，已在对话中输出该文件要求的留档摘要（合并摘要 / 纠正摘要）；案件目录已追加 **`交底书修订对话记录.md`**（或等价日志）
 □ Step 3–4 已完成授权可行性初筛；若「区别特征清晰度」「技术效果可论证性」或「方案成熟度」为 0–1 分，未直接推荐为主方向
 □ 查新完成且写入 1.1 与区别论述（符合 `prior_art_search.md`：**优先** `tools/cnipa_epub_search.py`，**国知局侧已分多次调用、每轮一词，并已自行合并** `EPUB_HITS_JSON`；**`abstract` 必用且已充分理解后再概括**；CNIPA EPUB 的 `cnipa_qr_or_hint_url` 只作提示，不写成稳定 URL）
+□ 渠道异常或新环境首跑时，已运行 `channel_preflight.py` 并把环境状态记入 `query_log.md`；EPUB 覆盖不足或环境阻断时已用 `gp_xhr_search.py` 补检（命中仅作发现级候选）
 □ Step 5 已输出 A/B/C/D 查新结论、最小对比表和「可用区别特征」；高相关文献具备 `verification_status`，商业库候选仅标 `commercial_db_discovered` / `commercial_db_content_checked`，写入交底书公开引用前已用 `patent_link_verify.py` / 稳定公开页 / 官方源完成必要复核；已回写 Step 3–4 推荐方向
 □ 案件目录已生成或追加 `prior_art_dossier.json`/`.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；若阳性对照不足 3 条或关键文献未核验，本轮最高 D/partial-D，交付最高 WARN
 □ 除用户明确跳过外，完成摘要预览

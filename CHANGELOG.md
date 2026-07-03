@@ -4,6 +4,17 @@
 
 ---
 
+## v3.5.0 (2026-07-03) - Search channel resilience and Google Patents XHR fallback
+
+- Added `tools/gp_xhr_search.py`: Google Patents XHR keyword search as a discovery-level channel (`google_xhr_search_result`) to offset the CNIPA EPUB first-page-only (~10 hits/term) coverage limit; single-line `GP_HITS_JSON:` output aligns with `EPUB_HITS_JSON` and feeds `patent_link_verify.py` directly.
+- Added `tools/channel_preflight.py`: read-only environment preflight emitting one-line `CHANNEL_STATUS_JSON` (system proxies, Playwright/Chromium, Google Patents page + XHR reachability, EPUB TCP); CNIPA PSS is never probed by script.
+- Documented execution-environment rules in Step 5 §D and tools/README: CNIPA-side scripts must run on the user's local machine; cloud-sandbox failures (e.g. Codex cloud egress rejected by the CNIPA WAF) are environment states to record in `query_log.md`, never "no prior art" or "script broken"; Windows curl schannel `CRYPT_E_REVOCATION_OFFLINE` false negatives noted.
+- Fixed `cnipa_epub_search.py` argument parsing: `--help` / `-h` now prints usage instead of being submitted to the EPUB site as a literal search term.
+- Added `prompts/prior_art_search.md` §A2 (XHR channel usage, politeness limits, EPUB/XHR division of labor) and the `google_xhr_search_result` source state to the evidence tables.
+- Added offline tests for `gp_xhr_search.py` payload parsing and the argparse fix.
+
+---
+
 ## v3.4.0 (2026-06-23) - Formal disclosure cleanliness gate
 
 - Added `references/formal_disclosure_cleanliness.md` to separate formal disclosure正文 from handoff notes, evidence packages, QA logs, and tool/process instructions.

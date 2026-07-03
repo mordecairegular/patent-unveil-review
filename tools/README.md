@@ -11,8 +11,12 @@
 | **`cnipa_epub_parse.py`** | 仅解析已保存的 HTML：`python tools/cnipa_epub_parse.py path/to/_last_result_xxx.html`；字段含标题、公开号、`cnipa_qr_or_hint_url`、`google_patents_url`、`verification_status`、**`abstract`**（若有）。`link` 只保留给已核验稳定 URL，本解析器默认不填。 |
 | **`patent_link_verify.py`** | 读取 JSON 数组或含 `EPUB_HITS_JSON:` 的终端记录，尝试打开 Google Patents `/zh`、`/en` 稳定页，输出 **`PATENT_LINKS_JSON:`**。只有 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新报告或交底书 1.1。 |
 | **`prior_art_dossier.py`** | 在用户案件目录生成/更新 `prior_art_dossier.json`、`prior_art_dossier.md`、`positive_controls.md`、`unverified_sources.md`、`query_log.md`。输入可为 `EPUB_HITS_JSON` / `PATENT_LINKS_JSON` 文件或终端记录；只做留档整理，不替代实质查新判断。 |
+| **`gp_xhr_search.py`** | **（Step 5 补充渠道，§A2）** Google Patents XHR 关键词检索，补 EPUB「仅首页 ~10 条/词」短板；仅标准库、走系统代理、无 Playwright 依赖；**stdout 仅一行** `GP_HITS_JSON:`（字段与 `EPUB_HITS_JSON` 对齐，可直接喂 `patent_link_verify.py`）；输出一律 `google_xhr_search_result` 发现级候选；≤5 页/次礼貌抓取。 |
+| **`channel_preflight.py`** | **（环境预检）** 只读检查：系统代理、Playwright/Chromium、Google 页与 XHR 可达性、EPUB TCP；**不探测 PSS**。**stdout 仅一行** `CHANNEL_STATUS_JSON:`，记入案件 `query_log.md`。渠道失败=环境状态，不是「无现有技术」，也不是脚本损坏。 |
 
-依赖：`pip install -r tools/requirements-cnipa.txt` 与 `python -m playwright install chromium`。环境变量见各脚本文件头。默认结果 HTML 落在 **`tools/_last_result_*.html`**（已 `.gitignore`）。
+依赖：`pip install -r tools/requirements-cnipa.txt` 与 `python -m playwright install chromium`（`gp_xhr_search.py` / `channel_preflight.py` 仅标准库，无需 Playwright）。环境变量见各脚本文件头。默认结果 HTML 落在 **`tools/_last_result_*.html`**（已 `.gitignore`）。
+
+**执行环境**：CNIPA 侧脚本须在**用户本机**执行；云端沙箱（境外数据中心出口 IP）常被 CNIPA WAF 拒绝。新机器或上次失败后先跑 `channel_preflight.py`。诊断连通性勿只用 Windows curl（schannel 的 `CRYPT_E_REVOCATION_OFFLINE` 会误报站点不可达；Python urllib/Playwright 不受影响）。
 
 抓取失败、解析无命中或命中未核验时，Agent 按 **`prompts/prior_art_search.md`** 继续执行稳定来源复核与补检（Google Patents / Espacenet / WIPO / Google 学术等）。不得把 `http://epub.cnipa.gov.cn/patent/CN...` 或二维码 title 写成已核验公开源。
 

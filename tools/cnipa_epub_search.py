@@ -34,6 +34,7 @@
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -93,8 +94,18 @@ def _usage() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _ensure_utf8_stdio()
-    argv = argv if argv is not None else sys.argv[1:]
-    terms = _terms_from_argv(argv)
+    parser = argparse.ArgumentParser(
+        prog="cnipa_epub_search.py",
+        description="CNIPA 公布公告检索+解析（Playwright 过 WAF）；空白拆词、一段一查、按公开号合并。",
+        epilog='example: python tools/cnipa_epub_search.py "batch 调度 异构"',
+    )
+    parser.add_argument(
+        "terms",
+        nargs="*",
+        help="检索词；按空白拆分为多段，一段一查后合并（最多 %d 段）" % _MAX_TERMS,
+    )
+    args = parser.parse_args(argv)
+    terms = _terms_from_argv(args.terms)
     if not terms:
         _usage()
         return 2

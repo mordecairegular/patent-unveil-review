@@ -45,6 +45,7 @@ AI 协作者的主要价值是加速检索、整理、对比、方案收紧、�
 | `official_cnipa_epub_detail_opened` / `official_egaz_page_images_archived` | 官方详情页或官方页图复核、暂停条件核对 | 冒充 PSS 复核或原始 PDF |
 | `official_claims_transcribed_from_page_images` | 在页图基础上形成可读权利要求对比 | 当作 CNIPA 可复制文本或代理人法律意见 |
 | `cnipa_result_page_parsed` | 候选发现、待复核清单 | 稳定 URL、正文公开引用 |
+| `google_xhr_search_result` | Google Patents XHR 检索发现候选（`gp_xhr_search.py`），补 EPUB 首页覆盖短板 | 稳定 URL、正文公开引用、A/B 结论直接依据 |
 | `commercial_db_discovered` | 商业库发现候选 | 正文公开引用 |
 | `commercial_db_content_checked` | 商业库摘要/著录项内部对比 | 正文公开引用、PASS 依据 |
 | `third_party_not_indexed` | 未被稳定源收录的风险提示 | 低估风险或忽略 |

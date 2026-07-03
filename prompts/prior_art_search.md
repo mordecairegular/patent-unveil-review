@@ -49,6 +49,7 @@
 | `third_party_verified` | 是 | Google Patents、Espacenet、WIPO、出版社/DOI 等稳定页已打开且著录项匹配 |
 | `npl_verified` | 是 | 非专利文献稳定来源已打开且题名/作者/摘要匹配 |
 | `cnipa_result_page_parsed` | 否 | 仅从 CNIPA 公布公告结果页解析到候选；可用于发现，不可单独支撑最终结论 |
+| `google_xhr_search_result` | 否 | 仅从 Google Patents XHR 检索结果（`gp_xhr_search.py`）解析到候选；发现级，同 `cnipa_result_page_parsed` 待遇，高相关条目须经稳定详情页复核升级 |
 | `third_party_not_indexed` | 否 | 第三方稳定源暂未收录，常见于很新的 CN 公开 |
 | `commercial_db_discovered` | 否 | 壹专利 / 高数图等商业库结果列表发现候选；可用于内部发现，不可作为公开引用 |
 | `commercial_db_content_checked` | 否 | 已在商业库详情页读取摘要、著录项、IPC/CPC 或权利要求；可支撑内部对比，不可作为公开引用 |
@@ -109,6 +110,8 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 4. **执行方式**（Step 5 在读完本文件后**先尝试**）：
 
    ```bash
+   # 环境不确定时（新机器/云沙箱/上次 EPUB 失败）先做渠道预检，结果记入 query_log.md
+   python3 ${CLAUDE_SKILL_DIR}/tools/channel_preflight.py
    pip install -r tools/requirements-cnipa.txt
    python -m playwright install chromium
    # Agent：对上一节每个检索单位各执行一次（示例仅展示首轮）
@@ -119,7 +122,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
    - **`cnipa_epub_search.py`** 若人工单次传入多词，会按空白拆段、进程内**一段一查**并去重（**stderr** 可出现 **`EPUB_MERGE:`**）；与 Agent **分多次调用**策略无关。
    - 成功时 **stdout 仅一行** **`EPUB_HITS_JSON:`** + JSON 数组（UTF-8，含中文 `abstract`）；**`EPUB_MERGE:`** / **`EPUB_NOTE:`** / **`EPUB_HINT:`** 等在 **stderr** 且为 **ASCII**（减轻 PowerShell 把中文 stderr 当成错误流）。解析命中时请以 **stdout 该行 JSON 为准**，勿因 stderr 或终端编码误判「未命中」而不必要地降级 WebSearch。Windows 乱码与 PowerShell 注意见 **`INSTALL.md`**（`chcp 65001` / `PYTHONUTF8=1`、勿滥用 `2>&1`）。
    - 将 JSON 中的公开号、标题、摘要和 `cnipa_qr_or_hint_url` 写入查新证据包；**不得**把 `cnipa_qr_or_hint_url` 当作已核验公开源 URL 写入 1.1。后续必须用 Google Patents / Espacenet / WIPO / CNIPA PSS 或人工详情页打开结果进行稳定复核。
-   - **补检/换源条件**（满足任一则继续执行 B/C/D 渠道并在 `query_log.md` 记录）：命令非 0 退出、超时、无 Playwright、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。
+   - **补检/换源条件**（满足任一则继续执行 A2/B/C/D 渠道并在 `query_log.md` 记录）：命令非 0 退出、超时、无 Playwright、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。换源时优先 **`gp_xhr_search.py`**（§A2）；渠道失败作为**环境状态**记录（如「EPUB 在当前环境阻断」），**不得**写成「检索无结果」。
 
 5. **`abstract` 字段（国知局条目，规定必用）**
 
@@ -131,6 +134,19 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
    - **缺失时**：若某条 JSON **无** `abstract` 或为空（旧版页面 / 表格布局未解析到等），须在查新笔记中注明「该条无摘要字段」，并改用**已核验详情页**或 **Google Patents** 等可核验来源补全理解后再写 1.1，**不得**留空理由含糊带过。
 
 6. **链接与著录**：CNIPA EPUB 脚本输出的 `cnipa_qr_or_hint_url` 只是提示路径；**禁止**写成国知局详情 URL 或稳定公开源。若仅能从公布站得到公开号，优先用 **`patent_link_verify.py`** 或浏览器打开 **Google Patents** 稳定页 `https://patents.google.com/patent/CN…/zh` / `/en` 复核；仍未收录时标记 `third_party_not_indexed` 并列入未核验清单。
+
+### A2. Google Patents XHR 关键词补充检索（`gp_xhr_search.py`，发现级）
+
+CNIPA EPUB 公布站结果**仅有首页约 10 条/词且无翻页**；候选池探针、覆盖度补强或 EPUB 在当前环境不可用时，用本仓库 **`tools/gp_xhr_search.py`** 做 Google Patents 关键词检索（按相关度排序、覆盖中英文与授权文本、含申请人与日期字段）：
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 2
+```
+
+- **stdout 仅一行 `GP_HITS_JSON:`**，字段与 `EPUB_HITS_JSON` 对齐；可与 EPUB 命中按 `pub_number` 去重合并，并直接作为 `patent_link_verify.py` 的输入复核。
+- 输出条目一律为 **`google_xhr_search_result`**（发现级，同 `cnipa_result_page_parsed` 待遇）：可用于发现与候选清单，**不可**单独支撑 A/B 结论或写入 1.1 公开引用；高相关条目必须经稳定详情页复核升级（`third_party_verified` 等）。
+- 该 XHR 为站点前端接口（非公开 API），可能变更或加防护；须礼貌抓取（≤5 页/次、页间间隔）。失效时回退 WebSearch（patents.google.com 域限定）+ 详情页复核，并在 `query_log.md` 记录环境状态，**不得**因渠道失效下调查新结论。
+- 与 EPUB 的分工：EPUB 长于**中国最新公布**（含尚未被第三方收录的新公开，18 个月盲区边缘文献），XHR 长于**全库相关度检索与授权文本**；正式查新两者都执行。
 
 ### B. Google Patents / Espacenet / WIPO（高相关文献必做复核）
 
@@ -171,6 +187,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 - CNIPA PSS、EPUB、EGAZ 等国内官方站点可能被学校 WebVPN、全局 VPN、海外代理、系统代理或内置浏览器链路破坏，典型表现为 `HTTP 412`、空白 DOM、脚本资源缺失、验证码异常或下载接口失败。此时不要把失败解释为“该专利不存在”。
 - 若 PSS 在当前环境被阻断，应记录 `official_pss_blocked_in_current_environment`，并建议用户在本机 Chrome/Edge 中关闭全局 VPN/代理，或对 `*.cnipa.gov.cn`、`*.cponline.cnipa.gov.cn` 设置 DIRECT，必要时用国内手机热点直连后人工下载/截图。
 - 若 CNIPA EPUB 官方详情页和 EGAZ 官方页图已经取得，可按实际情况记录 `official_cnipa_epub_detail_opened`、`official_egaz_page_images_archived`、`official_claims_transcribed_from_page_images`；但仍不得写成 `official_pss_verified`，也不得把页图重建 PDF 写成验证码下载的原始 PDF。
+- **执行环境须知**：CNIPA 侧脚本（`cnipa_epub_search.py` 等）**应在用户本机执行**。云端沙箱（如 Codex 云环境）出口多为境外数据中心 IP，常被 CNIPA WAF 直接拒绝，且未必安装 Playwright Chromium——此类失败属**环境问题**，应记录环境状态（`official_pss_blocked_in_current_environment`、「EPUB 在当前环境阻断」等）并换本机执行或换渠道（§A2 / WebSearch），**不得**据此判「无相关现有技术」或「脚本损坏」。环境不确定时先运行 `tools/channel_preflight.py`，把 `CHANNEL_STATUS_JSON` 存入 `query_log.md`。
 
 ### E. 商业专利库辅助检索（壹专利 / 高数图）
 
