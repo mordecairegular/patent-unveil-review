@@ -4,6 +4,19 @@
 
 ---
 
+## v3.6.0 (2026-07-03) - T0 candidate pool module: direction-mining front-end
+
+- Added `prompts/candidate_pool.md` (T0): dual-entry candidate pool generation (entry A: project-scan output feeds topic modeling; entry B: cold start from business domain), pipeline of boundary breakdown → technical problem pool → query design → probe-level search → candidate topic cards; gate 1 (project brief incl. application purpose / innovation-magnitude tolerance / narrow-direction allowance) and gate 2 (user final review: business fit, material availability, action feasibility, commercial-rule technicalization).
+- Added `templates/candidate_topic_card.md`: dual-title rule (concise ≤25 chars per CNIPA examination-guideline convention + full technical-route working title), must-keep independent-claim features, claim forbidden zones (with publication numbers), stop conditions, qualifier-dependency degree, search-provenance line, claim-skeleton annex.
+- Two-tier search formalized in `prior_art_search.md` ("查新分级" table): probe-level (direction triage) vs case-level (topic finalization) share the same evidence model and provenance discipline; probe zero-hit recorded as "not found within probe scope", unsearched channels as "未覆盖", never "未检出".
+- Evidence-anchored grading in `patent_points_analyzer.md`: pre-search screening scores are hypothesis scores (probe-ordering only); A/B/C/D only after real search evidence; unprobed directions capped at "unrated (low confidence)". Write-back table gains 是否进独权 / 限定依赖度 / 分层 columns.
+- Anti-qualifier-stacking: post-conflict order (redefine problem → switch axis → new mechanism → split → only then narrow), measurable qualifier-dependency (AND-feature count to distinguish from all known close art), three-layer output (主推/可发表/窄化备选), dual-title rule.
+- Gate 4 checklist in `disclosure_preview.md`: title length, mainline naturalness, protection-combination preference, confidentiality boundary (details the user does not want published), quantitative-effect softening, embodiment demotion.
+- PSS boundary statement in `prior_art_search.md` §D: PSS is CNIPA's official search data source, not an official patentability endorsement; sign-off = user's/agent's internal confirmation of the evidence-based go/no-go conclusion.
+- Post-case domain-pack backfill guidance (lexicon, negative-example library, verified-active applicants, cross-case claim forbidden-zone registry); domain-pack contents stay in the user's project directory — never committed to this public repository.
+
+---
+
 ## v3.5.0 (2026-07-03) - Search channel resilience and Google Patents XHR fallback
 
 - Added `tools/gp_xhr_search.py`: Google Patents XHR keyword search as a discovery-level channel (`google_xhr_search_result`) to offset the CNIPA EPUB first-page-only (~10 hits/term) coverage limit; single-line `GP_HITS_JSON:` output aligns with `EPUB_HITS_JSON` and feeds `patent_link_verify.py` directly.
