@@ -4,6 +4,20 @@
 
 ---
 
+## v3.6.1 (2026-07-03) - Disclosure content-quality fixes (Step 6/7)
+
+- **Module description now requires input/processing-basis/output/upstream-downstream** (was "作用与关联关系，非输入输出"): both `disclosure_builder.md` 三、（三）and `template_reference.md`; bans pure-functional "用于识别/判断/优化" descriptions. Aligns Step-7 generation with the implementability discipline used elsewhere.
+- **Core-action implementability gate at generation time** (not only Step-8 self-check): Step-7 §third-chapter now demands input / processing-basis / output / exception-handling for every 识别/判断/映射/匹配/选择/优化/调度/预测/评估/归因/修正/校验/排序/分配 action.
+- **Prior-art URL rule unified**: formal disclosure 正文 no longer forces per-reference URLs; URLs + source-status live in the evidence pack (consistent with `prior_art_search.md` + `formal_disclosure_cleanliness.md`). Body carries only pub-number/title/direction/closeness/distinction.
+- **Numbering tension resolved**: added an internal-reference convention note — `3.4.1 符号表` / `3.5 参数表` are shorthand for 三、（五）符号与公式 / 三、（六）关键技术参数; body uses Chinese numbering only, self-check verifies by content not literal `3.4.1` headings.
+- **Step-7 title defaults to the topic card's concise title (≤25 chars)**, not the full technical-route working title — prevents title bloat, ties Step-7 to the T0 double-title rule.
+- **DOCX headings now black** (`md_to_docx.py` `_add_heading` overrides Word's default blue Heading-N style color) — matches Chinese disclosure convention; body already black.
+- **mermaid A4-fit requirement**: system/flow diagrams must render within one A4 page — prefer `flowchart TB` for >8 nodes, short node labels, `subgraph` layering, ≤~12 nodes/diagram (split into overview + per-module otherwise), visual QA must re-render if overflow/overlap.
+- Deferred (per user + reviewer): splitting `disclosure_builder` into content/format/delivery files (architectural, high-risk pre-generation); claim-orientation stays an *optional* Step-6 checklist item (not a forced gate) — publishability-focused cases may have no claim view at MVP time.
+- Tests: 37/37 pass.
+
+---
+
 ## v3.6.0 (2026-07-03) - T0 candidate pool module: direction-mining front-end
 
 - Added `prompts/candidate_pool.md` (T0): dual-entry candidate pool generation (entry A: project-scan output feeds topic modeling; entry B: cold start from business domain), pipeline of boundary breakdown → technical problem pool → query design → probe-level search → candidate topic cards; gate 1 (project brief incl. application purpose / innovation-magnitude tolerance / narrow-direction allowance) and gate 2 (user final review: business fit, material availability, action feasibility, commercial-rule technicalization).

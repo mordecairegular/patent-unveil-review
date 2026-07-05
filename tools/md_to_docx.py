@@ -987,6 +987,8 @@ def _add_heading(doc: Document, level: int, text: str):
     h = doc.add_heading(plain, level=min(max(level, 1), 9))
     for run in h.runs:
         _set_run_font(run, "黑体" if level <= 2 else "宋体")
+        # 中文交底书标题用黑色，覆盖 Word「标题N」样式的默认蓝色
+        run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
 
 
 def _add_body_paragraph(
