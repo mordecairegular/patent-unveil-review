@@ -4,6 +4,15 @@
 
 ---
 
+## v3.6.2 (2026-07-05) - Technical-effect wording gate + control-formula support
+
+- **Technical-effect wording gate (formal body)**: honesty means no fabrication/overclaim, NOT competitive self-incrimination in the filing text. When sim/measurement shows the method is not-better/worse than prior art in some scenarios, the formal disclosure/spec **must not** write "尚未优于/劣于现有路线 / 工程化待优化 / 某场景更差" (usable as adverse evidence in examination/invalidation); instead **reframe the same fact positively as the method's own robustness/safe-degradation capability** (e.g. residual-risk check + warning → explainability + graceful degradation), keep the full comparative (incl. unfavorable) data in internal review records/evidence pack, and keep only the method's real positive quantitative effects + a validation-stage caveat in the body. Reconciles honesty (internal) with sound patent drafting (formal).
+- **Control/scheduling method formula-support gate**: control methods involving state recursion (SOC/temperature/queue) or constraints (order commitments/safety bounds) must give in 第三章 ①state recursion/composition formulas (efficiency, capacity, timestep) and ②quantified constraint expressions (e.g. order-minimum-power = remaining energy / remaining time), so service/order constraints read as technical constraints not management rules — lowers subject-matter risk and satisfies enablement.
+- Derived from a real GPT patent-review of the PVSC-001 disclosure (GPT, not Codex, is the heterogeneous reviewer for patent/disclosure content; Codex is for coding tasks).
+- Tests: 37/37 pass.
+
+---
+
 ## v3.6.1 (2026-07-03) - Disclosure content-quality fixes (Step 6/7)
 
 - **Module description now requires input/processing-basis/output/upstream-downstream** (was "作用与关联关系，非输入输出"): both `disclosure_builder.md` 三、（三）and `template_reference.md`; bans pure-functional "用于识别/判断/优化" descriptions. Aligns Step-7 generation with the implementability discipline used elsewhere.
