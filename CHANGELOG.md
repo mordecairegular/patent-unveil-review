@@ -4,6 +4,16 @@
 
 ---
 
+## v3.6.3 (2026-07-05) - Constraint-infeasibility handling + sim-claim scoping
+
+- **Constraint-infeasibility handling** added to the control-formula gate: control-method constraints (order commitments, safety bounds, resource limits) must specify what happens when the constraint **cannot** be met (infeasibility flag + warning / safe degradation) — must NOT write boundless "保证/一定不违约/必然满足" over-claims (over-strong support, easy to counterexample). Ties into the v3.6.2 safe-degradation framing.
+- **Time-series residual/verification**: for horizon quantities (e.g. future-window violation), residual/verification computations should re-evaluate per predicted step and take the extremum, not a single scalar approximation.
+- **Sim/measurement absolute-claim scoping**: absolute quantitative statements in the body (100% / 全部场景 / 均为…) must be scoped to "在所述实施例中", not stated as universal conclusions.
+- Derived from a second-round GPT patent-review of the PVSC-001 R2 disclosure. (Note: one review point — "SOC formula doesn't use ηd" — was a reviewer misread; the formula already used P_dis/η_d − η_c·P_chg correctly, so it was NOT changed; independent evaluation of review comments matters.)
+- Tests: 37/37 pass.
+
+---
+
 ## v3.6.2 (2026-07-05) - Technical-effect wording gate + control-formula support
 
 - **Technical-effect wording gate (formal body)**: honesty means no fabrication/overclaim, NOT competitive self-incrimination in the filing text. When sim/measurement shows the method is not-better/worse than prior art in some scenarios, the formal disclosure/spec **must not** write "尚未优于/劣于现有路线 / 工程化待优化 / 某场景更差" (usable as adverse evidence in examination/invalidation); instead **reframe the same fact positively as the method's own robustness/safe-degradation capability** (e.g. residual-risk check + warning → explainability + graceful degradation), keep the full comparative (incl. unfavorable) data in internal review records/evidence pack, and keep only the method's real positive quantitative effects + a validation-stage caveat in the body. Reconciles honesty (internal) with sound patent drafting (formal).
