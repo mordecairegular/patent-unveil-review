@@ -1,0 +1,26 @@
+{
+  "_about": "Sample numeric-check spec for tools/qa_numeric_reproduce.py. Recomputes a disclosure's worked-example numbers from its OWN formulas and checks them against what the draft says. Copy, replace with your case's constants/formulas/numbers. Keys starting with _ are ignored. If the user already has an executable model (e.g. a project *.py with --test-only), prefer reusing that instead of re-encoding formulas here.",
+  "_check_types": {
+    "value_checks": "computed expr must match `expect` (independent recompute of a worked value)",
+    "monotonic_checks": "expr must be monotonic in `direction` across `sweep` (catches wrong-direction trend claims, e.g. 'K rises with gap' when it falls)",
+    "claim_checks": "computed expr must match the number `stated` in the draft (catches 'the draft prints a number the formula does not give')"
+  },
+  "constants": {"A": 11250, "B": 273750, "gse": 0.01},
+  "definitions": [
+    "C = log(1 + 1/gse)",
+    "P(h) = 101.325*(1 - 2.25577e-5*h)**5.25588",
+    "Vb(h,d) = B*P(h)*d/(log(A*P(h)*d) - log(C))",
+    "K(h,d) = Vb(h,d)/Vb(0,d)"
+  ],
+  "value_checks": [
+    {"name": "Vb at h=4500m, d=100um equals draft Table (598 V)", "expr": "Vb(4500,100e-6)", "expect": 598, "tol_rel": 0.01}
+  ],
+  "monotonic_checks": [
+    {"name": "K decreases as gap grows at 5500 m", "expr": "K(5500,d)", "var": "d",
+     "sweep": [50e-6, 100e-6, 200e-6, 500e-6], "direction": "decreasing"}
+  ],
+  "claim_checks": [
+    {"name": "draft states K(4500m,100um)=0.691", "expr": "K(4500,100e-6)", "stated": 0.691, "tol_rel": 0.02}
+  ],
+  "_try_this": "Change the claim_check `stated` to 0.726 (a wrong value a real draft once printed for a 500um gap) and re-run: it FAILs with computed≈0.645, exit 1 — which is exactly the delivery-blocking behaviour."
+}

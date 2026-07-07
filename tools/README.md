@@ -228,6 +228,26 @@ XML QA 是必要门禁，但不能替代版式视觉检查。若环境可用 Mic
 
 ---
 
+## qa_numeric_reproduce.py — 数值可复现门禁（Step 8 自检）
+
+**与 `qa_docx_math.py` 互补**：后者查公式**排版/OMML**（公式*渲染*得对不对）；本工具查**数值**（正文写的数*算*得出来不）。层面不同，含关键量化效果时都要过。
+
+用交底书**自身公式/参数**（或复用用户可执行模型）复算实施例/技术效果里的关键数值与趋势，核对是否与正文一致。抓的是“公式写对了、但数字/方向填错了”这类靠语法/逻辑核对发现不了的错。
+
+spec 文件（默认 **JSON，零依赖**；装了 PyYAML 也可用 YAML），三类检查：
+
+- `value_checks`：算值 ≈ `expect`（独立复算某工作点）。
+- `monotonic_checks`：`expr` 沿 `sweep` 的单调方向是否为 `direction`（抓“随 X 升高/降低”方向标反）。
+- `claim_checks`：算值 ≈ 正文所印 `stated` 值（抓“稿里印的数公式给不出”）。
+
+```bash
+python3 tools/qa_numeric_reproduce.py path/to/numeric_check.json
+```
+
+样板见 **`templates/numeric_check.sample.json`**。全过退出 0；任一失败退出 1——含关键量化效果时本轮 **FAIL**，改对再交付。`definitions` 支持 `name=expr` 与 `name(args)=expr`，表达式在**受限沙箱**执行（仅数学函数，禁 `__` 与属性访问）。**有用户自有模型（如某 `*.py --test-only`）时优先复用其断言**，本工具是没有模型时的通用兜底。
+
+---
+
 ## iteration_dialog_log.py — 修订对话记录（迭代用）
 
 每轮 **`merger.md` / `correction_handler.md`** 交付后，在**案件目录**追加一条 **`交底书修订对话记录.md`**：含**本地时间与 UTC**、用户说明摘要、本轮交付文件名、合并/纠正摘要摘录。规则见 **`prompts/iteration_context.md`**。

@@ -282,6 +282,15 @@ python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 
 
 上述内容应写入 `prior_art_dossier.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`、交接说明或交付检查记录。`commercial_db_content_checked` 可以支撑内部查新对比、代理人沟通和区别特征理解，但仍不得伪装成 `public_source_verified` 或正式法律检索意见。
 
+## 最接近现有技术须核读独立权利要求（R0–R1 / 主对比，硬规则）
+
+摘要用于**发现与初判**；但对**最接近现有技术**、**R0–R1 高相关**、或将写入 1.1 作为**主要对比**的文献，仅读摘要/标题**不足**——摘要常淡化或误导技术实质（例如把"实测样本 + 特征量 + 机器学习模型"的方案概括成"建立数学模型预测"，据此切出的区别特征会失真甚至反噬）。故：
+
+- **必须核读其独立权利要求原文**，据此确定"相同点 / 区别点 / 可用区别特征"，且这些点须能对应到独权的**技术特征**而非摘要措辞。
+- 影像型/扫描 PDF 无文本层时，**渲染为页图做视觉核读**（记 `official_claims_transcribed_from_page_images`，保留页图路径与转写责任），或在 Google Patents / Espacenet 打开其权利要求文本核读（`third_party_verified`）。
+- 证据字段新增 `primary_reference`（是否最接近现有技术）与 `claims_read`（是否已核读独权原文）；最小对比表中 `primary_reference=yes` 的行必须 `claims_read=yes`。
+- **门禁**：最接近现有技术 `claims_read=no` 时，本轮查新最高 **D/partial-D**，不得据摘要断言区别特征、不得进入 PASS 轨道。
+
 ## 分析要求
 
 对检索到的、与方案**高度相关**的现有专利或公开文献逐项概括：
@@ -321,6 +330,8 @@ observed_title
 observed_abstract_short
 why_relevant
 covered_features
+primary_reference        # yes/no：是否最接近现有技术
+claims_read              # yes/no：是否已核读独立权利要求原文（primary_reference=yes 时必须 yes）
 verification_time
 ```
 
@@ -341,7 +352,7 @@ verification_time
 
 A/B/C/D 还受来源状态约束：
 
-- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。
+- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。**并且最接近现有技术必须已核读独立权利要求原文（`claims_read=yes`）**；仅摘要级理解时最高 D/partial-D。
 - C：可以基于稳定来源确认“高度相似”或“区别特征弱”；若高度相似文献仅有未核验候选，不应直接判 C，应判 D/partial-D 并要求复核。
 - D：出现以下任一情形即为 D 或 partial-D：关键文献不可核验、只有 CNIPA EPUB 结果页候选、正负样本不足、检索式过窄/过宽、CNIPA/PSS 登录或验证码阻断、稳定来源标题/摘要冲突、无法说明 18 个月公开盲区外的检索覆盖。
 - 不得把“某个检索词超时/0 命中”写成“没有相关现有技术”；应记录为该检索词失败或无结果，并换词/换源补检。
