@@ -25,7 +25,7 @@ NS = {
     "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
 }
 
-CHECK_IDS = ("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9")
+CHECK_IDS = ("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10")
 
 PLACEHOLDER_RE = re.compile(r"待填|待补充|待确认|待核|TODO|TBD|\[待填写\]|【待填写】", re.I)
 USER_FILL_LINE_RE = re.compile(
@@ -35,6 +35,7 @@ USER_FILL_MARKER_RE = re.compile(r"（用户自填）|\[待填写\]|待填写")
 FIELD_LABEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}\b")
 FILENAME_RE = re.compile(r"^.+_\d{14}\.(md|docx)$", re.I)
 NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
+DEFENSIVE_PHRASE_RE = re.compile(r"不在于|不作为|不强制|不以|不宜|显著降低")
 
 
 @dataclass
@@ -618,6 +619,30 @@ def version_report(root: Path) -> CheckOutcome:
     return outcome
 
 
+def check_defensive_phrasing(md_path: Path) -> CheckOutcome:
+    """WARN-level scan: surface negation/defensive phrasing for human judgment.
+
+    These tokens are not banned; each occurrence must be judged — an
+    attorney-facing reminder belongs in the handoff note, a genuine technical
+    feature should be rewritten as an affirmative limitation. Never FAIL.
+    """
+    outcome = CheckOutcome("C10", "defensive_phrasing")
+    for line_no, raw in enumerate(
+        md_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        for match in DEFENSIVE_PHRASE_RE.finditer(raw):
+            outcome.warn_items.append(
+                {
+                    "file": md_path.name,
+                    "line": line_no,
+                    "token": match.group(0),
+                    "content": _safe_text(raw),
+                    "hint": "判定归属：代理人提示→交接说明；技术特征→改正向限定",
+                }
+            )
+    return outcome
+
+
 def _max_status(outcomes: Sequence[CheckOutcome]) -> str:
     if any(outcome.fail_items for outcome in outcomes):
         return "FAIL"
@@ -771,6 +796,8 @@ def run_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any], list[str]]:
         add(run_numeric_reproduce(numeric_spec))
     if not skip("C9", "version_report"):
         add(version_report(root))
+    if not skip("C10", "defensive_phrasing"):
+        add(check_defensive_phrasing(md_path))
 
     status = _max_status(outcomes)
     fails = _json_entries(outcomes, "fail_items")

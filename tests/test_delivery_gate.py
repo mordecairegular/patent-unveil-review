@@ -183,6 +183,28 @@ def test_filename_convention_warns_on_bad_name(tmp_path: Path) -> None:
     assert outcome.warn_items[0]["same_stem"] is False
 
 
+def test_defensive_phrasing_scan_flags_negation_not_affirmative(tmp_path: Path) -> None:
+    md = tmp_path / "body.md"
+    md.write_text(
+        "\n".join(
+            [
+                "本发明不在于风速预测模型。",
+                "本发明可兼容幂律与对数律，区别在于按敏感度调整阈值。",
+                "误差显著降低。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    outcome = delivery_gate.check_defensive_phrasing(md)
+
+    assert outcome.status == "WARN"
+    flagged_lines = {item["line"] for item in outcome.warn_items}
+    assert 1 in flagged_lines  # 不在于
+    assert 3 in flagged_lines  # 显著降低
+    assert 2 not in flagged_lines  # affirmative "区别在于" must not trip the scan
+
+
 def test_confirmation_artifacts_preview_skipped_allows_checkpoint4(tmp_path: Path) -> None:
     case_dir = tmp_path / "case"
     prior = case_dir / "prior_art_search"

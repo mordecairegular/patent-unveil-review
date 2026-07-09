@@ -4,6 +4,18 @@
 
 ---
 
+## v3.8.1 (2026-07-09) - Affirmative-framing gate: keep defensive judgments out of the body
+
+From a user's disclosure-writing experience (wind-speed extrapolation case): defensive/negative judgments — scope-guarding, attorney claim-strategy reminders — narrow the protection surface when they leak into the formal specification body. They belong in the handoff note / review record / prior-art log; the body should carry affirmative technical features and effects. Generalizes the v3.6.2 effect-wording gate (which only covered competitive self-incrimination) into a broader principle.
+
+- **`disclosure_builder.md` 防御性判断与正向表述门禁**: six positive-rewrite patterns — (1) compatible-not-exclusive ("可兼容 X，区别在于…" instead of "本发明不在于 X", which proactively cedes scope); (2) affirmative-additive effect enumeration ("除…外，还提供…") instead of self-weakening disclaimers ("不以…为唯一目标"); (3) product-behavior promise → superordinate technical output ("生成风险提示信息，包括…中的至少一种"); (4) attorney strategy reminders ("存储介质不宜作为区别主线") stay out of the body — body only says "本发明还可通过电子设备/存储介质/计算机程序产品实现"; (5) converge the independent claim but don't self-negate in the spec ("上述模型均可纳入该闭环", not "这些都不是本发明"); (6) abstract independent claim, specific embodiments ("至少两类候选策略" in the claim, the six concrete strategies in embodiments/dependent claims).
+- **G7 reconciliation (`disclosure_self_check.md` §8.5)**: the v3.7.1 "pivot the effect mainline to traceability/robustness when magnitude is modest" now specifies the pivot must be *affirmative-additive* ("除…改善外，还提供…"), NOT a disclaimer ("不以…为唯一目标" / "本发明不在于…") — a disclaiming pivot reads as weak effect and a negation cedes scope.
+- **§8.3**: attorney claim-strategy meta-comments added to the formal-body cleanliness ban (distinct from the existing tool/process leakage ban — these contain no banned tool-words, so the old scan missed them); new negation/defensive-phrasing scan checklist item.
+- **`delivery_gate.py` C10 (`defensive_phrasing`, WARN-only)**: machine backstop that lists occurrences of 不在于 / 不作为 / 不强制 / 不以 / 不宜 / 显著降低 in the delivered `.md` body for per-occurrence judgment (attorney-note → move out, or → rewrite affirmative). Never FAIL — the tokens are not banned, each needs a human call; the gate surfaces, it does not decide. Implements the user's "固定加一道检查" literally.
+- Tests: 50/50 pass (+1 for C10).
+
+---
+
 ## v3.8.0 (2026-07-09) - Unified machine-checkable delivery gate
 
 Root cause: delivery-quality gates were spread across several tools plus a 60+-item self-check checklist; enforcement depended on the executing agent's diligence, and Codex-drafted disclosures (no interactive session discipline backing them) showed a measurably higher defect-escape rate — undated placeholders shipped in the body, enumerated source-tier counts that didn't sum to their stated total, `long_sparse_direct`-style multi-underscore field labels mangled into OMML subscripts by the existing docx conversion rule, multi-equation blocks compressed into one paragraph. None of these had a machine check; all were "supposed to be caught" by reading a checklist.

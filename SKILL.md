@@ -36,6 +36,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 **v3.8.0 新增**：**统一机器交付门禁 `tools/delivery_gate.py`**——把此前散落在多个脚本与自检清单里的机器可校验项收敛为一条命令、一个 `DELIVERY_GATE_JSON` 输出：C1 复用 `qa_docx_math.py` 做公式/正文清洁 QA；C2 占位符扫描（含身份字段白名单，`（用户自填）`不算缺陷）；C3 表格合计闭合；C4 字段标签完整性（专治 `long_sparse_direct` 类多下划线标签被误转 OMML 下标）；C5 红字残留/多式挤同段；C6 文件命名规范；C7 确认点 3/4（及 T0 的确认点 1/2）产物存在性；C8 复用 `qa_numeric_reproduce.py` 做数值复现；C9 版本自报（不调用 git 命令，worktree 内同样可用）。定稿交付前必跑，`FAIL` 不得交付；语义类检查（逻辑闭环、权利要求一致性等）仍由 §8 与人工/Agent 完成，gate 不替代。
 
+**v3.8.1 新增**：**防御性判断与正向表述门禁**（跨案经验）——防御性/否定式判断（防独权写偏、客体主线取舍等**代理人策略提示**）属交接说明/审稿记录，**不进正式正文主叙事**；正文用正向技术特征与效果。六条正向改写：兼容而非排除（"可兼容 X，区别在于…"）、效果加法式列举（"除…外还提供…"，不用免责式）、产品承诺改上位技术输出、代理人策略提示不入正文、独权收敛但说明书不自我否定、独权抽象实施例具体。生成时见 `disclosure_builder.md`「防御性判断与正向表述门禁」；Step 8 见 `disclosure_self_check.md` §8.3 否定式表述扫描；`delivery_gate.py` 增 **C10** 机器兜底（WARN 列出 `不在于/不作为/不强制/不以/不宜/显著降低` 供逐处判定归属，**非 FAIL**）。
+
 ## 环境与约定
 
 - **语言**：默认与用户语种一致；专利与法律术语采用行业常用表述。
@@ -94,7 +96,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 | 保存交底书路径 | 写入用户指定路径；未指定时可建议 `./outputs/{案件标识}/`；**凡交付的** `.md` / `.docx` 须为 **`{案件名}_{YYYYMMDDHHmmss}`**（§7.3 第 5 点，**含首次定稿与迭代**），勿默认覆盖旧稿；`outputs/` 整目录默认由 `.gitignore` 忽略 |
 | 迭代对话留档 | 每轮 **merger / correction** 交付后，在案件目录追加 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或等价手工），见 **`prompts/iteration_context.md`** |
 | 交付检查留档 | 每次向用户落盘交付 `.md`/`.docx` 后，在案件目录追加 **`交底书交付检查记录.md`**（**`tools/delivery_check_log.py`** 或等价手工），记录 PASS/WARN/FAIL、交付文件、待补项和检查摘要；见 **`disclosure_self_check.md` §8.5** |
-| 交付前统一机器门禁（v3.8.0） | **`Bash`** 运行 `python tools/delivery_gate.py --case-dir <案件目录> --md <交付.md> --docx <交付.docx>`；一条命令覆盖 docx 公式/正文清洁 QA、占位符扫描（含身份字段白名单）、表格合计闭合、字段标签完整性、公式段落残留、命名规范、确认点产物存在性、数值复现（传 `--numeric-spec` 时）与版本自报，自动追加 `交底书交付检查记录.md`；`DELIVERY_GATE_JSON` 最后一行为准，`FAIL` 不得交付 |
+| 交付前统一机器门禁（v3.8.0，C10 v3.8.1） | **`Bash`** 运行 `python tools/delivery_gate.py --case-dir <案件目录> --md <交付.md> --docx <交付.docx>`；一条命令覆盖 docx 公式/正文清洁 QA、占位符扫描（含身份字段白名单）、表格合计闭合、字段标签完整性、公式段落残留、命名规范、确认点产物存在性、数值复现（传 `--numeric-spec` 时）、版本自报与否定式/防御性表述扫描（C10，WARN），自动追加 `交底书交付检查记录.md`；`DELIVERY_GATE_JSON` 最后一行为准，`FAIL` 不得交付 |
 | 结构有限辅助附图合规参考 | **`Read`** → `${CLAUDE_SKILL_DIR}/references/structural_patent_requirements.md`，获取 CNIPA 附图规范、结构权利要求格式和部件编号规范；该参考不用于创造性评估 |
 | 法规来源索引 | 需要核对法源、版本和适用范围时 **`Read`** → `${CLAUDE_SKILL_DIR}/references/legal_sources.md`；不要把法规全文复制进交底书正文 |
 
