@@ -34,6 +34,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 **v3.7.1 新增**：评审与权利要求可靠性门禁（跨案复盘，提取问题特征而非绑定案情）：①**外部审稿意见分诊**——GPT/代理人/审查员意见须逐条核实后再采纳，标【采纳/拒绝（附证据）/存疑】，纠正摘要含分诊表（`prompts/correction_handler.md`）；②**评审输入为 DOCX 须渲染核对**——纯文本提取会把正常 OMML/μ 读成“公式空白/单位错”假缺陷（`prompts/iteration_context.md`）；③**A 路线权利要求一致性**——独权必要特征与“可选/非必要”声明零冲突、逐特征规避测试、过窄参数不入独权（`disclosure_self_check.md` §8.1）；④**独权联动闭环检查**——步骤间须显式参数耦合，防“指标并列”式独权（`patent_points_analyzer.md`＋`disclosure_builder.md`）；⑤算法良定义三查（循环依赖/双重拟合分界/周期量圆周统计，§8.2）；⑥效果幅度-措辞匹配（幅度温和禁“显著”）；⑦默认保护组合补**计算机程序产品**（五客体）＋发明名称不堆客体；⑧交底书固定栏目（本发明摘要、可替代实施方式与规避设计、术语与缩略词表、引用文献表）；⑨查新前用“预查新优先级”术语；⑩Step 6 预览默认必做；⑪联系人/发明人等身份字段一律留用户自填。定位锚三条见本文件开头。
 
+**v3.8.0 新增**：**统一机器交付门禁 `tools/delivery_gate.py`**——把此前散落在多个脚本与自检清单里的机器可校验项收敛为一条命令、一个 `DELIVERY_GATE_JSON` 输出：C1 复用 `qa_docx_math.py` 做公式/正文清洁 QA；C2 占位符扫描（含身份字段白名单，`（用户自填）`不算缺陷）；C3 表格合计闭合；C4 字段标签完整性（专治 `long_sparse_direct` 类多下划线标签被误转 OMML 下标）；C5 红字残留/多式挤同段；C6 文件命名规范；C7 确认点 3/4（及 T0 的确认点 1/2）产物存在性；C8 复用 `qa_numeric_reproduce.py` 做数值复现；C9 版本自报（不调用 git 命令，worktree 内同样可用）。定稿交付前必跑，`FAIL` 不得交付；语义类检查（逻辑闭环、权利要求一致性等）仍由 §8 与人工/Agent 完成，gate 不替代。
+
 ## 环境与约定
 
 - **语言**：默认与用户语种一致；专利与法律术语采用行业常用表述。
@@ -92,6 +94,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 | 保存交底书路径 | 写入用户指定路径；未指定时可建议 `./outputs/{案件标识}/`；**凡交付的** `.md` / `.docx` 须为 **`{案件名}_{YYYYMMDDHHmmss}`**（§7.3 第 5 点，**含首次定稿与迭代**），勿默认覆盖旧稿；`outputs/` 整目录默认由 `.gitignore` 忽略 |
 | 迭代对话留档 | 每轮 **merger / correction** 交付后，在案件目录追加 **`交底书修订对话记录.md`**（**`tools/iteration_dialog_log.py`** 或等价手工），见 **`prompts/iteration_context.md`** |
 | 交付检查留档 | 每次向用户落盘交付 `.md`/`.docx` 后，在案件目录追加 **`交底书交付检查记录.md`**（**`tools/delivery_check_log.py`** 或等价手工），记录 PASS/WARN/FAIL、交付文件、待补项和检查摘要；见 **`disclosure_self_check.md` §8.5** |
+| 交付前统一机器门禁（v3.8.0） | **`Bash`** 运行 `python tools/delivery_gate.py --case-dir <案件目录> --md <交付.md> --docx <交付.docx>`；一条命令覆盖 docx 公式/正文清洁 QA、占位符扫描（含身份字段白名单）、表格合计闭合、字段标签完整性、公式段落残留、命名规范、确认点产物存在性、数值复现（传 `--numeric-spec` 时）与版本自报，自动追加 `交底书交付检查记录.md`；`DELIVERY_GATE_JSON` 最后一行为准，`FAIL` 不得交付 |
 | 结构有限辅助附图合规参考 | **`Read`** → `${CLAUDE_SKILL_DIR}/references/structural_patent_requirements.md`，获取 CNIPA 附图规范、结构权利要求格式和部件编号规范；该参考不用于创造性评估 |
 | 法规来源索引 | 需要核对法源、版本和适用范围时 **`Read`** → `${CLAUDE_SKILL_DIR}/references/legal_sources.md`；不要把法规全文复制进交底书正文 |
 
@@ -131,7 +134,8 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 4. **`Read`** `prior_art_search.md` → 执行 Step 5，形成 A/B/C/D 查新结论；随后**回写 Step 3–4 推荐方向、查新风险和可用区别特征**  
 5. **`Read`** `disclosure_preview.md` → 执行 Step 6（**确认点 4，默认必做**：输出 300–500 字预览＋保密边界/关键事实/保护方向确认清单，确认结果落案件目录 `预览确认记录.md`）；仅用户**明确表示跳过**时方可略过，并在交付检查记录注明「预览未经用户确认」  
 6. **`Read`** `disclosure_builder.md` 与 **`Read`** `template_reference.md` → 执行 Step 7（**首次交付**的 `.md`/`.docx` 亦须 **`{案件名}_{YYYYMMDDHHmmss}`**，§7.3 第 5 点）；交付对话中**须**按 **`disclosure_builder.md` §7.6** 补充「权利要求偏向点」建议交互（**仅对话**，不入正文）  
-7. **`Read`** `disclosure_self_check.md` → 内部执行 Step 8，修订后交付；每次落盘交付须在案件目录追加 **`交底书交付检查记录.md`**  
+7. **`Read`** `disclosure_self_check.md` → 内部执行 Step 8，修订后交付；每次落盘交付须在案件目录追加 **`交底书交付检查记录.md`**
+8. **交付前必跑门禁**：以 **`tools/delivery_gate.py`** 作为定稿交付的**唯一机器门禁入口**（`python tools/delivery_gate.py --case-dir <案件目录> --md <交付.md> --docx <交付.docx>`，含公式清单/关键数值复核时加 `--manifest`/`--numeric-spec`，用户明确跳过确认点 4 时加 `--preview-skipped`）；以其输出的 **`DELIVERY_GATE_JSON`** 最后一行为准，`FAIL` 不得交付，`WARN` 须把待补项与用户自填清单一并写入回复和交付检查记录，`PASS` 仅表示机器可校验项通过，不表示可直接提交专利局。该工具只覆盖占位符/计数闭合/字段标签/公式段落残留/命名规范/确认点产物存在性/版本自报等**机器可校验**项，§8 的语义类检查（逻辑闭环、权利要求一致性、公式正确性等）仍须人工/Agent 完成，二者互补不互相替代。
 
 **禁止**：交底书正文中包含「自检清单」章节；自检仅内部使用。
 
@@ -180,4 +184,5 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 □ 迭代纠错时外部意见（GPT/代理人/审查员）已逐条**分诊**（采纳/拒绝附证据/存疑，见 `correction_handler.md`），未盲改；评审对象为 .docx 时格式类结论基于**渲染核对**而非纯文本提取
 □ A 路线独权已过**权利要求一致性与联动闭环**检查（`disclosure_self_check.md` §8.1）：无「独权必要 vs 从属非必要」冲突、无可拆分指标并列独权、过窄参数未入独权
 □ 交底书含**本发明摘要**与第六章固定栏目（可替代实施方式与规避设计、术语与缩略词表、引用文献表）；联系人/发明人等身份字段保留「（用户自填）」，未代填或编造
+□ **`tools/delivery_gate.py` 已运行且非 FAIL**（v3.8.0）：`DELIVERY_GATE_JSON` 已读取，WARN 项与用户自填清单已写入回复和交付检查记录；gate 只覆盖机器可校验项，不替代本清单的语义类检查
 ```
