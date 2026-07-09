@@ -80,6 +80,16 @@ python3 ${CLAUDE_SKILL_DIR}/tools/delivery_check_log.py --case-dir "{案件目�
 
 ---
 
+## 评审输入为 DOCX（渲染核对规则）
+
+迭代/纠错的对象稿或对照稿为 `.docx` 时：
+
+- 先用 `tools/docx_to_md.py` 转换后阅读；但**格式、公式、符号、单位类判断不得以纯文本提取为依据**——OMML 公式与特殊符号（μ、±、上下标）在纯文本层会丢失，产生「公式变量显示空白」「50~500 m 应为 μm」类**假缺陷**（DOCX 本身是正确的）。
+- 有 Word / LibreOffice 环境时，先渲染 PDF 或页面图再下格式类结论；无渲染通道时明确声明「未做页面级核对」，**不得输出格式类缺陷断言**，只可列「待人工打开 Word 复核」项。
+- 对外部审稿意见中的格式类指摘，同样先渲染核实再决定采纳（见 `correction_handler.md`「分诊」步骤）。
+
+---
+
 ## 建议执行顺序（短清单）
 
 1. 读本文 → 按上表选 `merger.md` 或 `correction_handler.md` 并 **`Read`**。

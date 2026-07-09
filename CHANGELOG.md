@@ -4,6 +4,28 @@
 
 ---
 
+## v3.7.1 (2026-07-08) - Review-triage + claim-consistency gates (three-case retrospective)
+
+Prompt-level hardening from a cross-case gap review (two Codex-drafted student disclosures — wind-speed extrapolation, turbulence-matrix imputation — plus the PVSC-001 line and a GPT skill-comparison): recurring failures were external review comments applied without verification, A-route claims with internal contradictions, and template/terminology gaps.
+
+- **External-review triage (`correction_handler.md` step 2)**: comments from GPT / patent attorneys / examiners must be verified item-by-item BEFORE editing — numeric/formula comments recomputed or diffed against the original (a reviewer once proposed a "fix" identical to the original SOC formula — misread); format/symbol/unit comments render-verified (text extraction once fabricated "blank formulas / 50~500 m unit error" against a correct DOCX); prior-art characterizations checked against claim text. Each item marked 采纳 / 拒绝(with evidence) / 存疑; triage table required in the correction summary. User-sovereign local facts exempt.
+- **DOCX-review render rule (`iteration_context.md`)**: format-level defect claims about a .docx require a render check (Word/soffice → PDF/page images); plain-text extraction drops OMML/μ and fabricates defects. Without a render channel: no format-defect assertions, only "pending manual Word check" items.
+- **A-route claim consistency (`disclosure_self_check.md` §8.1 new subsection + §8.5 gate)**: independent-claim features must not conflict with "optional/non-essential" statements elsewhere (real case: mandatory 物理边界校验 in the independent claim while a dependent note declared it non-essential); per-feature circumvention test (drop-it-and-see; mandatory auxiliary layers → "at least one of" elasticity); over-narrow parameters (specific values / iteration counts / convergence precision) stay in embodiments. B-route §8.4 already had this; A-route now does too.
+- **Interlocked-loop test for independent claims (`patent_points_analyzer.md` new hard rule + `disclosure_builder.md` closure bullet)**: claim steps must exhibit explicit parameter coupling (output of step N constrains step N+1), not separable parallel metrics ("compute A, compute B, then select") — parallel-metric claims read as routine metric aggregation. Complements the v3.7.0 integral technical-character test (that one checks the endpoint, this one checks the structure). No fabricating couplings absent from user material.
+- **Algorithm well-definedness (§8.2, 3 new checks)**: topological definition order / cyclic dependency (declare initialization + update rule + stopping condition, e.g. the l(t) layering-key case); responsibility split between double-fitted parameter sets (proxy coefficients vs calibration factors); signed circular difference for periodic quantities (0°/360° wrap).
+- **Effect-wording vs magnitude (§8.5)**: modest measured improvements must not be called 显著/大幅 even with data — wording matches magnitude; pivot the effect mainline to traceability / robustness / risk control (feature-backed).
+- **Computer program product added as 5th subject**: SKILL.md default combo, analyzer tables, `disclosure_builder.md`, `method_system_patent_guide.md` — per the 2023 examination guideline; carrier subjects (device / medium / program product) are coverage tails: never the distinguishing mainline, never in the title.
+- **Title anti-stacking (all entries)**: invention titles must not enumerate subjects ("…方法、系统、设备及存储介质" → "…方法及系统"); the ≤25-char rule now applies beyond T0 cases.
+- **Fixed disclosure sections (superset structure, no profile system)**: 本发明摘要 (reuses the user-confirmed Step-6 preview; unnumbered, before Chapter 1), and Chapter 6 fixed subsections 可替代实施方式与规避设计防御 / 术语与缩略词表 / 引用文献表 — one structure serving both agent-review and law-firm-template readers.
+- **Pre-search terminology**: Step 3–4 pre-search table column renamed to 预查新优先级 (优先查新/备查/待补材料/暂缓); 主推/可发表/窄化备选 reserved for post-search layering only.
+- **Step 6 preview default-on (确认点 4)**: 300–500-char preview + confidentiality/facts/protection-direction checklist mandatory unless the user explicitly skips; confirmation lands in `预览确认记录.md`, skips logged in the delivery record.
+- **Identity fields are user-filled**: 联系人/发明人/申请人 never agent-filled — "（用户自填）" placeholder is not a delivery defect (listed as user-todo in the delivery record).
+- **Field-label vs math-variable rule (SKILL.md)**: multi-underscore enum/field labels (e.g. `long_sparse_direct`) are NOT formulas — must not be converted to OMML subscripts (a real DOCX mangling case); prefer Chinese name + label in parentheses in prose. Tool-level enforcement lands with the v3.8 delivery gate.
+- Positioning anchor added to SKILL.md: the skill serves exactly three acceptance goals — sound draft logic, runnable & reviewed MVP support, human-readable deliverable formatting; deep multi-perspective review and legal filing strategy stay external.
+- Docs-only change; test suite unchanged (must stay green).
+
+---
+
 ## v3.7.0 (2026-07-06) - Substantive-patentability hard gates (from a disclosure re-review)
 
 Four gates that extract the *problem feature* (so the next disclosure of any kind avoids the error), not the specifics of the case they came from.

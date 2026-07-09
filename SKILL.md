@@ -10,6 +10,8 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 本技能不替代专利代理师或律师出具正式新颖性、创造性、侵权或 FTO 法律意见；查新结论仅基于本轮可公开检索到的现有技术。
 
+**定位锚（三条验收目标，功能扩展准入滤网）**：本技能只为三件事服务——①交底书初稿**基础逻辑靠谱**（权利要求一致、联动闭环成立、算法良定义、数值可复现）；②支撑交底书的 **MVP/仿真正确编写、可运行并通过复核**；③交付给人看的 **`.md`/`.docx` 排版与格式合理**。深度多视角评审、法律申请策略等由外部 agent/skill 或代理人承担，不内置；新增功能须先说明服务于哪一条，否则不进本技能。
+
 **v2.1 新增**：授权可行性初筛、查新 A/B/C/D 决策分级、查新后回写推荐方向、PASS/WARN/FAIL 代理人审稿门禁，以及案件目录随行的 **`交底书交付检查记录.md`**。
 
 **v2.2 新增**：查新证据模型、来源状态分级、Google Patents 稳定页验证、阳性对照门禁、案件级 `prior_art_dossier` 留档；CNIPA EPUB 结果仅作候选发现，不再把二维码/猜测详情页当作可复核 URL。
@@ -30,11 +32,13 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 **v3.7.0 新增**：四项“实质可专利性”硬门禁（源自一次交底书独立复审的复盘，**提取问题特征而非绑定具体案情**）：①**最接近现有技术须核读独立权利要求原文**（摘要不足、易被误导），影像件渲染页图核读，`claims_read=no` 最高 D（`prompts/prior_art_search.md`）；②**数值可复现门禁**——凡关键量化效果（具体数值/趋势）须经第二次独立核对：能重算的优先复用用户自有模型、否则用 `tools/qa_numeric_reproduce.py` 核对稿值与趋势方向；**无可重算来源（实验/仿真/实测）时设决策点**——主动向用户索取背景/资料并由其决定展开人工核对或标“待核”按 WARN，**不默认启动大核验、不空转、不臆造**；落在 Step 8 自检（`prompts/disclosure_self_check.md` §8.2 执行 + §8.5 门禁）；③**测算/评估类客体整体技术性测试**——“输出评估结果/图表”的纯计算独权须补“物理量获取手段 + 技术性动作”，否则标客体风险（`prompts/patent_points_analyzer.md`）；④**“测算某物理系统”混合型**——方法主线但创造性依赖物理机理时保留物理锚点，结构词不强制转 B 路线（`prompts/intake.md` Q1.5）。
 
+**v3.7.1 新增**：评审与权利要求可靠性门禁（跨案复盘，提取问题特征而非绑定案情）：①**外部审稿意见分诊**——GPT/代理人/审查员意见须逐条核实后再采纳，标【采纳/拒绝（附证据）/存疑】，纠正摘要含分诊表（`prompts/correction_handler.md`）；②**评审输入为 DOCX 须渲染核对**——纯文本提取会把正常 OMML/μ 读成“公式空白/单位错”假缺陷（`prompts/iteration_context.md`）；③**A 路线权利要求一致性**——独权必要特征与“可选/非必要”声明零冲突、逐特征规避测试、过窄参数不入独权（`disclosure_self_check.md` §8.1）；④**独权联动闭环检查**——步骤间须显式参数耦合，防“指标并列”式独权（`patent_points_analyzer.md`＋`disclosure_builder.md`）；⑤算法良定义三查（循环依赖/双重拟合分界/周期量圆周统计，§8.2）；⑥效果幅度-措辞匹配（幅度温和禁“显著”）；⑦默认保护组合补**计算机程序产品**（五客体）＋发明名称不堆客体；⑧交底书固定栏目（本发明摘要、可替代实施方式与规避设计、术语与缩略词表、引用文献表）；⑨查新前用“预查新优先级”术语；⑩Step 6 预览默认必做；⑪联系人/发明人等身份字段一律留用户自填。定位锚三条见本文件开头。
+
 ## 环境与约定
 
 - **语言**：默认与用户语种一致；专利与法律术语采用行业常用表述。
 - **适用范围**：工程方法、软件系统、数据处理、控制测算、工程仿真/测算工具类中国发明专利。结构/机械类进入「有限辅助」通道，详见 `prompts/intake.md`。
-- **默认保护组合**：方法权利要求 + 系统/装置权利要求 + 电子设备权利要求 + 计算机可读存储介质权利要求；如查新或材料支撑不足，可收缩为方法+系统或单一系统方案。
+- **默认保护组合**：方法权利要求 + 系统/装置权利要求 + 电子设备权利要求 + 计算机可读存储介质权利要求 + **计算机程序产品权利要求**（2023 版审查指南明确客体，在线分发/云端部署场景尤宜保留）；如查新或材料支撑不足，可收缩为方法+系统或单一系统方案。设备/介质/程序产品为覆盖面客体（尾部保护），不作为区别现有技术的主线，**不进入发明名称**（题名规则见 `disclosure_builder.md`）。
 - **图示定稿（Step 7）**：
   - **主流程**：**3.2**/**3.4** 用 fenced **mermaid**；执行方式、**`mmdc`** 安装与降级规则见下表「交底书定稿交付」行及 **`tools/README.md`**。
   - **结构有限辅助**：附图由用户提供 CAD/Visio 线稿或标注草图；本技能仅辅助文字描述和附图标记一致性检查，不生成结构附图，不输出 PASS。详见 **`references/structural_patent_requirements.md`**。
@@ -62,7 +66,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 ### 数学公式、图示与 Word QA 硬约束
 
-涉及关键公式、符号表或量纲推导的交底书，须先建立公式清单（可复制 **`templates/patent_formula_manifest.yaml`**），字段至少含 `id`、`number`、`title`、`latex`、`display`、`dimension_check`；正文只引用清单中的公式，不得临场自由拼写关键公式。公式源必须是合法 LaTeX：希腊字母写 `\eta`、`\pi`、`\Phi`，正体文本下标写 `\mathrm{}`，分式写 `\frac{...}{...}`，求和写 `\sum_{t=1}^{T}`。若源稿中出现整行裸公式（例如 `V_sys / ln(R_socket/R_pin)`）或下一行单独编号 `(4)`，`md_to_docx.py` 必须升级为块级 OMML 公式并用右侧编号结构排版；正文解释中的 `V_sys`、`R_pin` 等裸下划线变量也必须转为 OMML 下标，不得作为普通文本残留。`.docx` 交付前必须运行 **`tools/qa_docx_math.py`**（`md_to_docx.py` 默认已执行）；若发现 `frac{`、`mathrm{`、`\(`、`\)`、`$`、`bare_subscript_identifier` 等残留或 manifest 编号/OMML 结构不一致，本轮不得作为定稿交付。
+涉及关键公式、符号表或量纲推导的交底书，须先建立公式清单（可复制 **`templates/patent_formula_manifest.yaml`**），字段至少含 `id`、`number`、`title`、`latex`、`display`、`dimension_check`；正文只引用清单中的公式，不得临场自由拼写关键公式。公式源必须是合法 LaTeX：希腊字母写 `\eta`、`\pi`、`\Phi`，正体文本下标写 `\mathrm{}`，分式写 `\frac{...}{...}`，求和写 `\sum_{t=1}^{T}`。若源稿中出现整行裸公式（例如 `V_sys / ln(R_socket/R_pin)`）或下一行单独编号 `(4)`，`md_to_docx.py` 必须升级为块级 OMML 公式并用右侧编号结构排版；正文解释中的 `V_sys`、`R_pin` 等裸下划线**数学变量**也必须转为 OMML 下标，不得作为普通文本残留。**例外（字段/枚举标签）**：`long_sparse_direct` 类多下划线英文字段标签**不是公式**，禁止转为下标、斜体或其它公式化处理（否则 Word 中被截断变形）；生成正文时此类标签优先用中文名称并在括号内附标签原文。`.docx` 交付前必须运行 **`tools/qa_docx_math.py`**（`md_to_docx.py` 默认已执行）；若发现 `frac{`、`mathrm{`、`\(`、`\)`、`$`、`bare_subscript_identifier` 等残留或 manifest 编号/OMML 结构不一致，本轮不得作为定稿交付。
 当使用 `md_to_docx.py --math-manifest <manifest.yaml>` 时，转换阶段须按 manifest 中 `display` 公式顺序为未显式 `\tag{}` 的块级公式自动补右侧编号；这不是单纯 QA 参数，而是排版编号来源。
 
 DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML 级交付门禁：除公式外，还会检查未渲染 mermaid 源码（如 `flowchart TB`）、Consolas/代码样式残留、嵌入媒体数量不足等问题。主流程系统框图与流程图若有任一 mermaid 块渲染失败，`mermaid_render.py` 只写出 Markdown 排障稿，不得继续生成定稿 Word。若当前环境有 Word/LibreOffice，可额外导出 PDF/页面图做视觉 QA；若无，应在 `交底书交付检查记录.md` 中声明未做页面级视觉 QA，并建议人工打开 Word 复核图示缩放、表格换行和公式视觉效果。
@@ -125,7 +129,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 2. **`Read`** `project_scan.md` → 执行 Step 2  
 3. **`Read`** `patent_points_analyzer.md` → 执行 Step 3–4，输出候选点和**查新前授权可行性初筛**  
 4. **`Read`** `prior_art_search.md` → 执行 Step 5，形成 A/B/C/D 查新结论；随后**回写 Step 3–4 推荐方向、查新风险和可用区别特征**  
-5. **`Read`** `disclosure_preview.md` → 执行 Step 6；用户可跳过  
+5. **`Read`** `disclosure_preview.md` → 执行 Step 6（**确认点 4，默认必做**：输出 300–500 字预览＋保密边界/关键事实/保护方向确认清单，确认结果落案件目录 `预览确认记录.md`）；仅用户**明确表示跳过**时方可略过，并在交付检查记录注明「预览未经用户确认」  
 6. **`Read`** `disclosure_builder.md` 与 **`Read`** `template_reference.md` → 执行 Step 7（**首次交付**的 `.md`/`.docx` 亦须 **`{案件名}_{YYYYMMDDHHmmss}`**，§7.3 第 5 点）；交付对话中**须**按 **`disclosure_builder.md` §7.6** 补充「权利要求偏向点」建议交互（**仅对话**，不入正文）  
 7. **`Read`** `disclosure_self_check.md` → 内部执行 Step 8，修订后交付；每次落盘交付须在案件目录追加 **`交底书交付检查记录.md`**  
 
@@ -162,7 +166,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 □ 渠道异常或新环境首跑时，已运行 `channel_preflight.py` 并把环境状态记入 `query_log.md`；EPUB 覆盖不足或环境阻断时已用 `gp_xhr_search.py` 补检（命中仅作发现级候选）
 □ Step 5 已输出 A/B/C/D 查新结论、最小对比表和「可用区别特征」；高相关文献具备 `verification_status`，商业库候选仅标 `commercial_db_discovered` / `commercial_db_content_checked`，写入交底书公开引用前已用 `patent_link_verify.py` / 稳定公开页 / 官方源完成必要复核；已回写 Step 3–4 推荐方向
 □ 案件目录已生成或追加 `prior_art_dossier.json`/`.md`、`query_log.md`、`positive_controls.md`、`unverified_sources.md`；若阳性对照不足 3 条或关键文献未核验，本轮最高 D/partial-D，交付最高 WARN
-□ 除用户明确跳过外，完成摘要预览
+□ 除用户明确跳过外，完成摘要预览（确认点 4），确认结果已落案件目录 `预览确认记录.md`；用户跳过时已在交付检查记录注明
 □ 主流程交底书已完成脱敏、mermaid（定稿均已渲染为 PNG 且 DOCX media 数量满足预期）、章节引用符合 template_reference；含公式时 **3.4.1 符号表、formula manifest、§7.7 体例**（维度下标、无字母多义、LaTeX 分隔符统一）、**Word 可编辑 OMML 公式**（无公式图片、无代码样式符号）、**`qa_docx_math.py --check-formal-text` PASS** 及 **3.5 符号列同形** 已满足；若无法做 Word/LibreOffice 页面级视觉 QA，已写入交付检查记录
 □ 最接近现有技术/R0–R1 主对比已**核读独立权利要求原文**（`claims_read=yes`；影像件已渲染页图核读）；仅摘要级时查新最高 D，未据摘要臆断区别特征
 □ 含关键量化效果的交底书关键数值已**独立二次核对**：可重算的（`qa_numeric_reproduce.py`/用户模型）稿值＝算值、方向一致且不符已改稿；无可重算来源的已在**决策点**向用户说明并按其决定处理（补料人工核对 / 标“待核”WARN），未闷头展开或空转
@@ -173,4 +177,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 □ 已按 `disclosure_self_check.md` §8.5 给出 PASS/WARN/FAIL；PASS 仅表示「代理人审稿就绪」，不表示可直接提交专利局；案件目录已追加 **`交底书交付检查记录.md`**
 □ 定稿类对话已含 **`disclosure_builder.md` §7.6**「权利要求偏向点」建议交互（**不入正文**、**不捏造**未在稿内出现的保护取向）；迭代再走 merger 时见 **`iteration_context.md`** 表格补充行
 □ 自检在后台完成，正文无自检清单章节；含公式时已按 **`disclosure_self_check.md` §8.2** 复核**公式正确性与公式逻辑**（有误已在 Step 8 直接改稿）；结构有限辅助案件已按 §8.4 完成专项检查并降级交付
+□ 迭代纠错时外部意见（GPT/代理人/审查员）已逐条**分诊**（采纳/拒绝附证据/存疑，见 `correction_handler.md`），未盲改；评审对象为 .docx 时格式类结论基于**渲染核对**而非纯文本提取
+□ A 路线独权已过**权利要求一致性与联动闭环**检查（`disclosure_self_check.md` §8.1）：无「独权必要 vs 从属非必要」冲突、无可拆分指标并列独权、过窄参数未入独权
+□ 交底书含**本发明摘要**与第六章固定栏目（可替代实施方式与规避设计、术语与缩略词表、引用文献表）；联系人/发明人等身份字段保留「（用户自填）」，未代填或编造
 ```
