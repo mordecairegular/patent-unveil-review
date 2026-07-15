@@ -288,6 +288,23 @@ python3 tools/delivery_check_log.py --case-dir outputs/某案件 --status WARN \
 
 ---
 
+## docx_comment_extract.py — 审阅 DOCX 批注提取（代理批注闭环 R1）
+
+从带批注的审阅 `.docx`（代理人预审意见、批注版交底书）提取全部批注：编号（`C01…`，回复批注 `C01-R1…`）、DOCX 批注 ID、作者、日期、**范围批注/点批注**分类（范围批注含锚定文字；点批注给所在段落摘录，图片段落回退到前一非空段落）、回复线程（`w15:paraIdParent`）、已解决标记（`w15:done`）、批注原文（**逐字，不改写不合并**）。配套流程见 **`prompts/review_comment_closure.md`**。
+
+**依赖**：仅标准库。
+
+```bash
+python3 tools/docx_comment_extract.py --input "某案件预审意见_审阅版.docx" \
+  --output "outputs/某案件/批注提取_20260714.md"
+```
+
+- 末行输出单行 **`COMMENT_EXTRACT_JSON`**（含 `comment_count` / `top_level_count` / `reply_count` 与逐条明细），供 Agent 机器读取。
+- `--output` 可选：生成「批注定位索引」Markdown（索引表 + 逐条原文 fenced block）。
+- 点批注的**作用范围**（可能针对整节/整图）工具不判断，由 Agent 按 `review_comment_closure.md` R2 补判。
+
+---
+
 ## docx_to_md.py — Word → Markdown + 抽取图片
 
 将 **.docx**（Word / WPS 等另存为 docx）转为 **Markdown**，并把文档内嵌图片落到磁盘，便于 **`Read` 与 Step 2 扫描**（与直接读二进制 .docx 相比更稳）。**Step 2** 对扫描树内**每一个** `.docx` 都应先转换再读产出 `.md`，见 `prompts/project_scan.md`。

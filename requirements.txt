@@ -9,3 +9,6 @@ matplotlib>=3.8.0
 
 # 可选：Step 5 国知局 epub.cnipa.gov.cn 抓取（Playwright，体积较大；未写入本文件以免默认全量安装）
 #   pip install -r tools/requirements-cnipa.txt && python -m playwright install chromium
+
+# 可选：delivery_gate.py C12 技术证据合同结构校验需要
+pyyaml>=6.0

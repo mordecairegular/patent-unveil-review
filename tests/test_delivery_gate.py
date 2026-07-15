@@ -183,6 +183,30 @@ def test_filename_convention_warns_on_bad_name(tmp_path: Path) -> None:
     assert outcome.warn_items[0]["same_stem"] is False
 
 
+def test_fuzzy_qualifier_scan_flags_unquantified_not_quantified(tmp_path: Path) -> None:
+    md = tmp_path / "body.md"
+    md.write_text(
+        "\n".join(
+            [
+                "若特征甲和特征乙近似同步下降且曲线无明显阶梯，判定为均匀衰减类。",
+                "两者损失率差值不超过 3 个百分点时判定为同步下降。",
+                "对于证据不足的情形，输出人工复核提示。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    outcome = delivery_gate.check_fuzzy_qualifier(md)
+
+    assert outcome.status == "WARN"
+    flagged_lines = {item["line"] for item in outcome.warn_items}
+    assert 1 in flagged_lines  # 近似同步 + 明显阶梯
+    assert 3 in flagged_lines  # 证据不足
+    assert 2 not in flagged_lines  # quantified criterion must not trip the scan
+    line1_tokens = {item["token"] for item in outcome.warn_items if item["line"] == 1}
+    assert line1_tokens == {"近似同步", "明显阶梯"}
+
+
 def test_defensive_phrasing_scan_flags_negation_not_affirmative(tmp_path: Path) -> None:
     md = tmp_path / "body.md"
     md.write_text(

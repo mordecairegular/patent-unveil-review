@@ -25,7 +25,10 @@ NS = {
     "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
 }
 
-CHECK_IDS = ("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10")
+CHECK_IDS = (
+    "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11",
+    "C12", "C13", "C14", "C15",
+)
 
 PLACEHOLDER_RE = re.compile(r"待填|待补充|待确认|待核|TODO|TBD|\[待填写\]|【待填写】", re.I)
 USER_FILL_LINE_RE = re.compile(
@@ -36,6 +39,13 @@ FIELD_LABEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}\b")
 FILENAME_RE = re.compile(r"^.+_\d{14}\.(md|docx)$", re.I)
 NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 DEFENSIVE_PHRASE_RE = re.compile(r"不在于|不作为|不强制|不以|不宜|显著降低")
+# 高信号模糊限定词（判定语境常被代理人追问“具体数值/条件是什么”）；
+# 词非禁用，逐处判定：给阈值/相对基准/组合判定条件，或注明示例阈值待标定。
+FUZZY_QUALIFIER_RE = re.compile(
+    r"近似同步|近似相[同等]|基本(?:相同|一致|同步)|大致相同"
+    r"|明显(?:大于|小于|高于|低于|优于|阶梯|异常)"
+    r"|风险较[低高]|证据不足|必要时|视情况|适当(?:调整|放宽|收紧)"
+)
 
 
 @dataclass
@@ -643,6 +653,293 @@ def check_defensive_phrasing(md_path: Path) -> CheckOutcome:
     return outcome
 
 
+def check_fuzzy_qualifier(md_path: Path) -> CheckOutcome:
+    """WARN-level scan: surface fuzzy qualifiers for quantification judgment.
+
+    From a two-case attorney-review retrospective: phrases
+    like 近似同步 / 明显大于 / 证据不足 / 必要时 draw "请给出具体数值范围/
+    判定条件" comments when left unquantified. Each occurrence needs one of:
+    a numeric threshold/range, a relative baseline, or a compound condition —
+    or an explicit "示例阈值，需按实际数据标定" note. Never FAIL.
+    """
+    outcome = CheckOutcome("C11", "fuzzy_qualifier")
+    for line_no, raw in enumerate(
+        md_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        for match in FUZZY_QUALIFIER_RE.finditer(raw):
+            outcome.warn_items.append(
+                {
+                    "file": md_path.name,
+                    "line": line_no,
+                    "token": match.group(0),
+                    "content": _safe_text(raw),
+                    "hint": "量化三选一：数值阈值/相对基准/组合判定条件；或注明示例阈值待标定（见 disclosure_builder.md 模糊限定词门禁）",
+                }
+            )
+    return outcome
+
+
+CLAIM_CLASS_ENUM = {"independent_core", "dependent", "implementation_param", "auxiliary_evidence"}
+BASELINE_KIND_ENUM = {"standard", "historical_clean", "post_treatment", "healthy_peer"}
+STEP_REQUIRED_FIELDS = ("id", "name", "claim_class", "inputs", "processing", "outputs", "consumers", "degraded_branch")
+BASELINE_REQUIRED_FIELDS = ("id", "kind", "source", "purpose", "update_condition")
+DECISION_REF_RE = re.compile(r"\bD\d{1,3}\b")
+# 实施参数（数字+单位）扫描；年份/式号/步骤号不含下列单位故不受影响
+IMPL_PARAM_UNIT_RE = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:小时|分钟|毫秒|个百分点|%|℃|°C|W/m[²2]|kWh|kW\b|MW\b|MHz|Hz|元/kWh|mm\b|μm|nm\b)"
+)
+
+
+def discover_evidence_contract(case_dir: Path) -> Path | None:
+    for pattern in ("*技术证据合同*.yaml", "*技术证据合同*.yml", "*evidence_contract*.yaml", "*evidence_contract*.yml"):
+        matches = sorted(case_dir.glob(pattern))
+        if matches:
+            return matches[-1]
+    return None
+
+
+def _load_contract(contract_path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        return None, "pyyaml 未安装：pip install pyyaml 后重跑 C12"
+    try:
+        data = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - report parse failure as gate item
+        return None, f"证据合同解析失败：{exc}"
+    if not isinstance(data, dict):
+        return None, "证据合同顶层须为映射（meta/baselines/decisions/steps）"
+    return data, None
+
+
+def check_evidence_contract(contract_path: Path | None) -> CheckOutcome:
+    """C12: structural validation of the technical evidence contract (FAIL-level).
+
+    Deterministic checks only — semantic judgments (e.g. whether a standard
+    baseline is misused as a live observation) stay in §8.1. Skips (info) when
+    no contract file exists: not every case requires one.
+    """
+    outcome = CheckOutcome("C12", "evidence_contract")
+    if contract_path is None:
+        outcome.info_items.append({"note": "未发现技术证据合同文件，跳过（测量/诊断类案件应提供）"})
+        return outcome
+    data, err = _load_contract(contract_path)
+    if err:
+        target = outcome.warn_items if "pyyaml" in err else outcome.fail_items
+        target.append({"file": contract_path.name, "issue": err})
+        return outcome
+
+    baselines = data.get("baselines") or []
+    decisions = data.get("decisions") or []
+    steps = data.get("steps") or []
+    baseline_ids = {str(b.get("id")) for b in baselines if isinstance(b, dict)}
+    decision_ids = {str(d.get("id")) for d in decisions if isinstance(d, dict)}
+    step_ids = {str(s.get("id")) for s in steps if isinstance(s, dict)}
+
+    def fail(issue: str, **extra: Any) -> None:
+        outcome.fail_items.append({"file": contract_path.name, "issue": issue, **extra})
+
+    def warn(issue: str, **extra: Any) -> None:
+        outcome.warn_items.append({"file": contract_path.name, "issue": issue, **extra})
+
+    for b in baselines:
+        if not isinstance(b, dict):
+            fail("baselines 条目须为映射")
+            continue
+        bid = str(b.get("id", "?"))
+        for field_name in BASELINE_REQUIRED_FIELDS:
+            if not str(b.get(field_name) or "").strip():
+                fail(f"基线 {bid} 缺少必填字段 {field_name}")
+        kind = str(b.get("kind") or "")
+        if kind and kind not in BASELINE_KIND_ENUM:
+            fail(f"基线 {bid} 的 kind 非法：{kind}", allowed=sorted(BASELINE_KIND_ENUM))
+
+    if not steps:
+        fail("steps 为空：证据合同至少须包含一个步骤条目")
+
+    # 预收集每个步骤 inputs 中的 derived: 引用，供 consumers 链路核对（与遍历顺序无关）
+    derived_inputs: dict[str, set[str]] = {}
+    for s in steps:
+        if isinstance(s, dict):
+            sid = str(s.get("id", "?"))
+            for inp in s.get("inputs") or []:
+                if isinstance(inp, dict):
+                    source = str(inp.get("source") or "")
+                    if source.startswith("derived:"):
+                        derived_inputs.setdefault(sid, set()).add(source.split(":", 1)[1])
+
+    for s in steps:
+        if not isinstance(s, dict):
+            fail("steps 条目须为映射")
+            continue
+        sid = str(s.get("id", "?"))
+        for field_name in STEP_REQUIRED_FIELDS:
+            value = s.get(field_name)
+            if value is None or (isinstance(value, (str, list)) and not value):
+                fail(f"步骤 {sid} 缺少必填字段 {field_name}")
+        claim_class = str(s.get("claim_class") or "")
+        if claim_class and claim_class not in CLAIM_CLASS_ENUM:
+            fail(f"步骤 {sid} 的 claim_class 非法：{claim_class}", allowed=sorted(CLAIM_CLASS_ENUM))
+        # 观测能力 vs 声称精度（rank 越大越精细）
+        obs_rank, out_rank = s.get("observation_rank"), s.get("output_rank")
+        if (obs_rank is None) != (out_rank is None):
+            warn(f"步骤 {sid} 只填写了 observation_rank/output_rank 之一，无法校验声称精度")
+        elif obs_rank is not None and out_rank is not None:
+            try:
+                if float(out_rank) > float(obs_rank):
+                    fail(
+                        f"步骤 {sid} 声称输出精度（rank {out_rank}）超过观测精度（rank {obs_rank}）",
+                        hint="降级为候选+置信度，或在 inputs 中补充更细粒度证据",
+                    )
+            except (TypeError, ValueError):
+                fail(f"步骤 {sid} 的 observation_rank/output_rank 须为数值")
+        # 输入引用完整性
+        for inp in s.get("inputs") or []:
+            if not isinstance(inp, dict):
+                continue
+            source = str(inp.get("source") or "")
+            if source.startswith("baseline:"):
+                ref = source.split(":", 1)[1]
+                if ref not in baseline_ids:
+                    fail(f"步骤 {sid} 引用了不存在的基线 {ref}")
+            elif source.startswith("derived:"):
+                ref = source.split(":", 1)[1]
+                if ref not in step_ids:
+                    fail(f"步骤 {sid} 引用了不存在的前序步骤 {ref}")
+        # 阈值来源
+        for th in s.get("thresholds") or []:
+            if isinstance(th, dict) and not str(th.get("source") or "").strip():
+                fail(f"步骤 {sid} 的阈值「{th.get('name', '?')}」缺少来源（可写「示例值，待现场标定」）")
+        # 决策编号引用
+        for text_field in ("processing", "degraded_branch"):
+            for ref in DECISION_REF_RE.findall(str(s.get(text_field) or "")):
+                if decision_ids and ref not in decision_ids:
+                    fail(f"步骤 {sid} 的 {text_field} 引用了决策表中不存在的 {ref}")
+        # 下游消费者引用
+        for consumer in s.get("consumers") or []:
+            consumer = str(consumer)
+            if consumer == "terminal":
+                continue
+            if consumer not in step_ids:
+                fail(f"步骤 {sid} 的 consumers 引用了不存在的步骤 {consumer}")
+            elif sid not in derived_inputs.get(consumer, set()):
+                # producer declares consumer, but consumer's inputs never reference producer
+                warn(
+                    f"步骤 {sid} 声明下游为 {consumer}，但 {consumer} 的 inputs 未引用 derived:{sid}（疑似步骤链断裂）"
+                )
+    return outcome
+
+
+def check_decision_refs(md_path: Path, contract_path: Path | None) -> CheckOutcome:
+    """C13: decision-id single source of truth (WARN-level).
+
+    Body D-id references must exist in the contract's decision table; table
+    entries should be referenced at least once. WARN not FAIL: a bare "D1"
+    token in prose may have unrelated meaning — each hit needs a human call.
+    """
+    outcome = CheckOutcome("C13", "decision_refs")
+    if contract_path is None:
+        outcome.info_items.append({"note": "无证据合同/决策表，跳过决策编号核对"})
+        return outcome
+    data, err = _load_contract(contract_path)
+    if err or not data:
+        outcome.info_items.append({"note": f"决策表不可读，跳过：{err}"})
+        return outcome
+    decision_ids = {str(d.get("id")) for d in (data.get("decisions") or []) if isinstance(d, dict)}
+    if not decision_ids:
+        outcome.info_items.append({"note": "证据合同未定义 decisions，跳过"})
+        return outcome
+    body = md_path.read_text(encoding="utf-8")
+    referenced = set(DECISION_REF_RE.findall(body))
+    for unknown in sorted(referenced - decision_ids):
+        outcome.warn_items.append(
+            {"file": md_path.name, "issue": f"正文引用了决策表中不存在的编号 {unknown}", "hint": "核对是否为决策引用漂移或普通符号撞名"}
+        )
+    for unused in sorted(decision_ids - referenced):
+        outcome.warn_items.append(
+            {"file": md_path.name, "issue": f"决策表条目 {unused} 未被正文引用", "hint": "正文各视图应引用统一决策编号，防 AND/OR 漂移"}
+        )
+    return outcome
+
+
+def check_attorney_reply(comments_json: Path | None, reply_path: Path | None) -> CheckOutcome:
+    """C14: attorney reply completeness — reply entries must cover every
+    top-level attorney comment (FAIL on mismatch). Skips unless both files given.
+    """
+    outcome = CheckOutcome("C14", "attorney_reply_consistency")
+    if comments_json is None or reply_path is None:
+        outcome.info_items.append({"note": "未提供 --comments-json/--attorney-reply，跳过"})
+        return outcome
+    raw = comments_json.read_text(encoding="utf-8").strip()
+    if "COMMENT_EXTRACT_JSON" in raw:
+        raw = raw.rsplit("COMMENT_EXTRACT_JSON", 1)[1].strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        outcome.fail_items.append({"file": comments_json.name, "issue": f"批注 JSON 解析失败：{exc}"})
+        return outcome
+    top_level = [c for c in payload.get("comments", []) if not c.get("is_reply")]
+    expected = {str(c.get("seq") or "").upper() for c in top_level if c.get("seq")}
+    if not expected:
+        expected = {f"C{i:02d}" for i in range(1, int(payload.get("top_level_count", 0)) + 1)}
+    reply_text = reply_path.read_text(encoding="utf-8")
+    found: set[str] = set()
+    for match in re.finditer(r"^(?:#{2,4}\s*|\|\s*)C(\d{1,3})\b", reply_text, re.M):
+        found.add(f"C{int(match.group(1)):02d}")
+    missing = sorted(expected - found)
+    extra = sorted(found - expected)
+    if missing:
+        outcome.fail_items.append(
+            {
+                "file": reply_path.name,
+                "issue": f"代理意见 {len(expected)} 条，回复缺少 {len(missing)} 条：{','.join(missing)}",
+            }
+        )
+    if extra:
+        outcome.warn_items.append(
+            {"file": reply_path.name, "issue": f"回复中出现批注清单外的编号：{','.join(extra)}"}
+        )
+    if not missing:
+        outcome.info_items.append({"note": f"回复覆盖全部 {len(expected)} 条代理意见"})
+    return outcome
+
+
+def check_impl_params_in_claims(md_path: Path) -> CheckOutcome:
+    """C15: implementation parameters (number+unit) inside the independent-claim
+    region of Chapter 5 (WARN-level). Dependent-claim subsections are exempt —
+    concrete values belong there or in embodiments.
+    """
+    outcome = CheckOutcome("C15", "impl_params_in_claims")
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    in_ch5 = False
+    in_dependent = False
+    for line_no, raw in enumerate(lines, start=1):
+        stripped = raw.strip()
+        if re.match(r"^#{0,4}\s*五、", stripped):
+            in_ch5, in_dependent = True, False
+            continue
+        if re.match(r"^#{0,4}\s*六、", stripped):
+            break
+        if not in_ch5:
+            continue
+        if "从属" in stripped and (stripped.startswith("#") or re.match(r"^[（(]?[一二三四五六七八九十\d]", stripped)):
+            in_dependent = True
+            continue
+        if in_dependent:
+            continue
+        for match in IMPL_PARAM_UNIT_RE.finditer(raw):
+            outcome.warn_items.append(
+                {
+                    "file": md_path.name,
+                    "line": line_no,
+                    "token": match.group(0),
+                    "content": _safe_text(raw),
+                    "hint": "实施参数疑入独权区：独权改「预设周期/预设阈值」，具体数值移实施例或从属保护点",
+                }
+            )
+    return outcome
+
+
 def _max_status(outcomes: Sequence[CheckOutcome]) -> str:
     if any(outcome.fail_items for outcome in outcomes):
         return "FAIL"
@@ -798,6 +1095,17 @@ def run_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any], list[str]]:
         add(version_report(root))
     if not skip("C10", "defensive_phrasing"):
         add(check_defensive_phrasing(md_path))
+    if not skip("C11", "fuzzy_qualifier"):
+        add(check_fuzzy_qualifier(md_path))
+    contract_path = args.evidence_contract or discover_evidence_contract(case_dir)
+    if not skip("C12", "evidence_contract"):
+        add(check_evidence_contract(contract_path))
+    if not skip("C13", "decision_refs"):
+        add(check_decision_refs(md_path, contract_path))
+    if not skip("C14", "attorney_reply_consistency"):
+        add(check_attorney_reply(args.comments_json, args.attorney_reply))
+    if not skip("C15", "impl_params_in_claims"):
+        add(check_impl_params_in_claims(md_path))
 
     status = _max_status(outcomes)
     fails = _json_entries(outcomes, "fail_items")
@@ -849,6 +1157,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--t0-dir", type=Path, help="T0 边界卡/主题卡目录")
     parser.add_argument("--preview-skipped", action="store_true", help="用户明确跳过确认点4")
     parser.add_argument("--whitelist-file", type=Path, help="额外占位符白名单正则文件")
+    parser.add_argument(
+        "--evidence-contract", type=Path,
+        help="技术证据合同 YAML（缺省时在案件目录自动发现 *技术证据合同*.yaml）",
+    )
+    parser.add_argument("--comments-json", type=Path, help="docx_comment_extract 输出的批注 JSON（C14 用）")
+    parser.add_argument("--attorney-reply", type=Path, help="代理意见逐条回复 md（C14 用）")
     parser.add_argument("--skip", action="append", choices=CHECK_IDS, default=[])
     parser.add_argument("--no-record", action="store_true", help="不写交付检查记录")
     return parser

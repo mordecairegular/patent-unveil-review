@@ -1,0 +1,139 @@
+# 技术证据合同模板（内部产物，不入交底书正文）
+#
+# 适用：测量/诊断/定位/状态识别/多模态证据类案件（见
+# references/technical_evidence_contract.md）。纯计算类案件可继续用
+# v3.9.0 的轻量「方案骨架」；本合同是骨架的超集。
+#
+# 用途：在生成正文前固化「技术事实—观测能力—证据职责—决策逻辑」，
+# 由 tools/delivery_gate.py C12 做结构化校验（须 pyyaml）。
+# 填写原则：内容须来自用户材料或用户确认，不得由 Agent 臆造；
+# 示例阈值在 source 中写明「示例值，待现场标定」。
+#
+# 本模板示例内容为脱敏通用示例（聚合量测→单体诊断类场景），不指向任何真实案件。
+
+meta:
+  case: DEMO-CASE            # 案件代号（脱敏可用代号）
+  version: 1
+  # 粒度等级表：rank 越大越精细，由撰写人按本案定义（领域无关）。
+  # C12 校验：每步 output_rank ≤ observation_rank（声称精度不得超过观测精度）。
+  granularity_scale:
+    - { rank: 1, level: 系统级 }
+    - { rank: 2, level: 聚合组级 }
+    - { rank: 3, level: 单体级 }
+    - { rank: 4, level: 单体内部区域级 }
+
+# 基线登记表（无基线概念的案件可为空列表 []）。
+# kind 枚举：standard（厂家/标准条件参考）| historical_clean（历史洁净/试运行）|
+#            post_treatment（处置后复测）| healthy_peer（同类健康统计）。
+# 标准参考基线只能作对比参考并须校正，不得当作现场当前观测（语义项，§8.1 复核）。
+baselines:
+  - id: BL1
+    kind: standard
+    source: 设备出厂标准条件测试数据（型号级）
+    purpose: 参考对比；使用前须做个体偏差与老化校正
+    valid_scope: 同型号设备；换算到参考工况后
+    update_condition: 设备更换或型号资料更新时
+    fallback: 改用 BL2；BL2 亦不可用时输出「无基线，降级为趋势筛查」
+  - id: BL2
+    kind: historical_clean
+    source: 试运行期同一单体的历史正常数据
+    purpose: 当前观测的对比基准
+    valid_scope: 采集工况与当前可换算一致
+    update_condition: 处置后复测合格时更新（闭环回写）
+    fallback: 同类健康单体统计基线（healthy_peer）
+
+# 决策条件表（单一事实源）：正文、模块说明、流程图、保护点一律引用 D 编号，
+# AND/OR 只在此处显式写出，各视图不得另写一套条件。
+decisions:
+  - id: D1
+    logic: AND
+    condition: 特征甲损失率与特征乙损失率之差 ≤ 同步阈值 且 曲线无阶梯
+    output: 判定为均匀衰减类
+  - id: D2
+    logic: OR
+    condition: 最高候选得分低于置信阈值 或 前两名得分差低于区分阈值 或 多源证据冲突
+    output: 判定为证据不足，走降级分支
+
+# 步骤条目：每个 S 步骤一条。
+# claim_class 枚举：independent_core（独权核心机制）| dependent（从属扩展特征）|
+#                  implementation_param（实施参数）| auxiliary_evidence（辅助证据/验证手段）。
+# consumers：下游步骤 id 列表；最终输出写 [terminal]。
+steps:
+  - id: S1
+    name: 采集聚合级运行数据
+    claim_class: independent_core
+    inputs:
+      - name: 聚合级时序量测
+        source: raw
+        observation_level: 聚合组级
+      - name: 采集周期配置
+        source: derived:S1a
+        observation_level: 系统级
+    observation_rank: 2
+    output_rank: 2
+    validity_check: 时间戳新鲜度、完整率、工况窗口筛选
+    processing: 按预设周期采集并做有效性筛选（周期具体取值属实施参数，见 S1a）
+    thresholds:
+      - { name: 完整率下限, value: 示例 95%, source: 示例值，待现场标定 }
+    outputs:
+      - 有效聚合量测序列
+    consumers: [S2]
+    degraded_branch: 完整率不足时该窗口不进入诊断，输出「数据不足」标记
+
+  - id: S1a
+    name: 采样周期设定
+    claim_class: implementation_param
+    inputs:
+      - name: 工程实施条件
+        source: external
+        observation_level: 系统级
+    observation_rank: 1
+    output_rank: 1
+    validity_check: 无
+    processing: 独权只写「按照预设周期或事件触发」；具体小时级取值写实施例/从属
+    thresholds: []
+    outputs:
+      - 采集周期配置
+    consumers: [S1]
+    degraded_branch: 无（配置项）
+
+  - id: S2
+    name: 归一化并计算相对基线的派生特征
+    claim_class: independent_core
+    inputs:
+      - name: 有效聚合量测序列
+        source: derived:S1
+        observation_level: 聚合组级
+      - name: 洁净基线
+        source: baseline:BL2
+        observation_level: 单体级
+    observation_rank: 2
+    output_rank: 2
+    validity_check: 基线与当前观测换算到同一参考工况
+    processing: 按式 (1)-(2) 归一化；派生特征相对差按 D1 判定
+    thresholds:
+      - { name: 同步阈值, value: 示例 3 个百分点, source: 示例值，待仿真/实测样本标定 }
+    outputs:
+      - 派生特征集（含来源层级标记）
+    consumers: [S3]
+    degraded_branch: 无基线时按 BL2.fallback 降级；特征冲突时按 D2 输出证据不足
+
+  - id: S3
+    name: 生成候选定位与置信度
+    claim_class: independent_core
+    inputs:
+      - name: 派生特征集
+        source: derived:S2
+        observation_level: 聚合组级
+      - name: 物理拓扑登记表
+        source: external
+        observation_level: 单体内部区域级
+    observation_rank: 2          # 输入证据只到聚合组级
+    output_rank: 2               # 故只声称「候选单体/候选区域+置信度」，不唯一定位
+    validity_check: 拓扑登记表须有物理来源（版型/连接关系/配准依据），不得算法臆测
+    processing: 特征-拓扑投影生成候选集；唯一定位须引入更细粒度辅助证据后另行声称
+    thresholds: []
+    outputs:
+      - 候选对象列表及置信度
+    consumers: [terminal]
+    degraded_branch: 候选不唯一或证据冲突时按 D2 输出待复核，不强行唯一化

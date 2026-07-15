@@ -1,94 +1,68 @@
 # Patent disclosure formula manifest template.
 # Keep formula IDs stable;正文只引用 id/number，不临场重拼关键公式。
+# owner_step：公式归属的方案骨架步骤 ID（如 S3/S4），见 disclosure_builder.md
+# 「公式随步走」门禁——每条公式须在其归属步骤的流程叙述中出现或被显式引用，
+# 无归属步骤的公式不得进入正文。
+# 本模板为脱敏通用示例（状态递推 + 约束 + 派生量 + 边界判定的典型链条），
+# 不指向任何真实案件；实际使用时按案件公式替换。
 
-- id: eq_energy_state
+- id: eq_state_recursion
   number: 1
-  title: 储能能量状态递推
+  title: 状态量递推
   display: true
-  latex: "B_{s,t}=B_{s,t-1}+\\eta_{\\mathrm{ch}}E_{s,t,\\mathrm{ch}}-\\frac{E_{s,t,\\mathrm{dis}}}{\\eta_{\\mathrm{dis}}}"
+  owner_step: S3
+  latex: "X_{t}=X_{t-1}+\\eta_{\\mathrm{in}}U_{t}-\\frac{V_{t}}{\\eta_{\\mathrm{out}}}"
   dimension_check: "kWh = kWh + kWh - kWh"
-  notes: "B 为储能能量状态，不直接称为无量纲 SOC。"
+  notes: "X 为有量纲状态量；如需无量纲比例另定义 x_t = X_t / X^{max}，勿混用。"
 
-- id: eq_energy_state_bounds
+- id: eq_state_bounds
   number: 2
-  title: 储能能量状态上下限
+  title: 状态量上下限约束
   display: true
-  latex: "B_s^{\\min}\\leq B_{s,t}\\leq B_s^{\\max}"
+  owner_step: S4
+  latex: "X^{\\min}\\leq X_{t}\\leq X^{\\max}"
   dimension_check: "kWh <= kWh <= kWh"
 
-- id: eq_hourly_self_use
+- id: eq_derived_quantity
   number: 3
-  title: 小时自用电量
+  title: 派生量定义（逐时段）
   display: true
-  latex: "W_{s,t,\\mathrm{self}}=E_{s,t,\\mathrm{direct}}+E_{s,t,\\mathrm{dis}}"
+  owner_step: S3
+  latex: "W_{t}=A_{t}+V_{t}"
   dimension_check: "kWh = kWh + kWh"
+  notes: "派生量须能追溯到台账/前序步骤输出（数据血缘门禁）。"
 
-- id: eq_annual_self_use
+- id: eq_aggregate
   number: 4
-  title: 年度自用电量
+  title: 派生量聚合
   display: true
-  latex: "W_{s,\\mathrm{self}}=\\sum_{t=1}^{T}W_{s,t,\\mathrm{self}}"
-  dimension_check: "kWh/year = sum(kWh)"
+  owner_step: S5
+  latex: "W=\\sum_{t=1}^{T}W_{t}"
+  dimension_check: "kWh/period = sum(kWh)"
 
-- id: eq_annuity_factor
+- id: eq_weighted_inner_product
   number: 5
-  title: 现值年金因子
+  title: 逐时段加权内积（保留时序信息）
   display: true
-  latex: "\\Phi(r,Y)=\\sum_{y=1}^{Y}\\frac{1}{(1+r)^y}"
-  dimension_check: "dimensionless"
+  owner_step: S6
+  latex: "G=\\sum_{t=1}^{T}W_{t}\\pi_{t}"
+  dimension_check: "元 = sum(kWh * 元/kWh)"
+  notes: "用逐时段内积而非年度均值，保留量值发生时段的信息。"
 
-- id: eq_first_boundary
+- id: eq_boundary
   number: 6
-  title: 电源侧第一边界
+  title: 解析边界（比值形式）
   display: true
-  latex: "p_{\\min}(s)=\\frac{I_s/\\Phi(r,Y)+O_s-R_{s,\\mathrm{exp}}-R_{s,\\mathrm{env}}}{W_{s,\\mathrm{self}}}"
-  dimension_check: "元/kWh = 元/年 / kWh/年"
-
-- id: eq_base_cost
-  number: 7
-  title: 用电侧纯购网基准成本
-  display: true
-  latex: "C_{\\mathrm{base}}(s)=\\sum_{t=1}^{T}L_{s,t}\\pi_t"
-  dimension_check: "元/年 = sum(kWh * 元/kWh)"
-
-- id: eq_load_cost
-  number: 8
-  title: 候选配置后的用电侧成本
-  display: true
-  latex: "C_{\\mathrm{load}}(s,p)=(p+f_s)W_{s,\\mathrm{self}}+F_s^{\\mathrm{fix}}+\\sum_{t=1}^{T}E_{s,t,\\mathrm{grid}}\\pi_t"
-  dimension_check: "元/年 = 元/年 + 元/年 + 元/年"
-
-- id: eq_second_boundary_general
-  number: 9
-  title: 用电侧第二边界通式
-  display: true
-  latex: "p_{\\max}(s)=\\frac{C_{\\mathrm{base}}(s)-F_s^{\\mathrm{fix}}-\\sum_{t=1}^{T}E_{s,t,\\mathrm{grid}}\\pi_t}{W_{s,\\mathrm{self}}}-f_s"
-  dimension_check: "元/kWh"
-
-- id: eq_second_boundary_simplified
-  number: 10
-  title: 用电侧第二边界简化式
-  display: true
-  latex: "p_{\\max}(s)=\\frac{\\sum_{t=1}^{T}W_{s,t,\\mathrm{self}}\\pi_t}{W_{s,\\mathrm{self}}}-f_s"
-  dimension_check: "元/kWh"
-
-- id: eq_band_width
-  number: 11
-  title: 可行边界宽度
-  display: true
-  latex: "\\Delta p(s)=p_{\\max}(s)-p_{\\min}(s)"
-  dimension_check: "元/kWh"
+  owner_step: S6
+  latex: "b=\\frac{G-F}{\\max(W,\\varepsilon)}"
+  dimension_check: "元/kWh = 元 / kWh"
+  notes: "分母加极小量 ε 保护，防止 W→0 时数值失稳（公式安全门）。"
 
 - id: eq_feasible_rule
-  number: 12
+  number: 7
   title: 可行性判定
   display: true
-  latex: "\\Delta p(s)>0"
-  dimension_check: "元/kWh > 0"
-
-- id: eq_robust_band
-  number: 13
-  title: 鲁棒可行区间
-  display: true
-  latex: "[p_{\\min}^{\\mathrm{rob}}(s),p_{\\max}^{\\mathrm{rob}}(s)]=[\\max_{k\\in\\mathcal{K}}p_{\\min}^{(k)}(s),\\min_{k\\in\\mathcal{K}}p_{\\max}^{(k)}(s)]"
-  dimension_check: "元/kWh interval"
+  owner_step: S7
+  latex: "\\Delta b=b_{\\max}-b_{\\min}>\\varepsilon_{0}"
+  dimension_check: "元/kWh > 元/kWh"
+  notes: "判定容差 ε₀ 属实施参数：独权写「预设容差」，取值入实施例。"
