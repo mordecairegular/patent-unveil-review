@@ -2,49 +2,70 @@
 
 ## 设计原则
 
-- **聚焦主流程**：工程方法、软件系统、数据处理、控制测算、工程仿真/测算工具类发明专利。
-- **有限结构辅助**：结构/机械材料只做文字、附图标记和格式辅助，不做专利点挖掘或创造性评估。
-- **证据先于结论**：查新结果须有来源状态、稳定 URL 或待复核说明，不能把候选页面当成已核验证据。
-- **交付可追溯**：交底书、查新 dossier、交付检查记录和迭代记录随案件目录保存。
+- **入口只做路由**：`SKILL.md` 定义适用范围、工作模式、全局不变量和按需加载入口，不承载各阶段的完整细则。
+- **事实只维护一次**：稳定业务口径写入 references；其中保护客体以 `references/method_system_patent_guide.md` §三为唯一权威来源。
+- **证据先于结论**：查新、数值、观测能力和修改落实均须留下可复核证据。
+- **生成后必须自审**：语义自检与机器门禁共同验收，任何一层都不能替代另一层。
+- **案件产物与技能代码分离**：正式交底书、证据包和修订记录保存在用户案件目录，不写回技能规则目录。
 
-## 目录一览
+## 目录职责
 
-| 路径 | 说明 |
-|------|------|
-| `SKILL.md` | 入口：适用范围、触发条件、步骤顺序、工具表和自用检查清单 |
-| `prompts/intake.md` | Step 1：路线分流、方案成熟度预检、结构有限辅助限制 |
-| `prompts/project_scan.md` | Step 2：项目文档与代码扫描，Office 文档先转 Markdown |
-| `prompts/patent_points_analyzer.md` | Step 3-4：候选点、授权可行性初筛、方案成熟度与保护组合建议 |
-| `prompts/prior_art_search.md` | Step 5：CNIPA EPUB 优先查新、稳定来源复核、A/B/C/D 分级 |
-| `prompts/disclosure_builder.md` | Step 7：交底书结构、四客体保护思路、图示和命名规则 |
-| `prompts/disclosure_self_check.md` | Step 8：内部自检与 PASS/WARN/FAIL 交付门禁 |
-| `prompts/iteration_context.md` | 迭代意图识别、命名、修订记录规则 |
-| `prompts/merger.md` | 新材料增量合并 |
-| `prompts/correction_handler.md` | 对话纠错与事实修正 |
-| `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、四客体模板 |
-| `references/method_system_patent_guide.md` | 工程方法与软件系统类专利撰写参考 |
-| `references/commercial_patent_db_verification.md` | 壹专利/高数图内容核验、来源状态、正文与交接说明分离 |
-| `references/formal_disclosure_cleanliness.md` | 正式交底书正文清洁规则，防止流程说明、工具说明和证据状态进入正文 |
-| `references/patent_workflow_lessons_ai_friendly.md` | 跨案件专利工作流沉淀和 AI 友好执行清单 |
-| `references/structural_patent_requirements.md` | 结构有限辅助参考，不用于创造性评估 |
-| `references/legal_sources.md` | 法源索引 |
-| `tools/` | CNIPA 查新、公开页验证、mermaid/DOCX 转换、dossier、交付日志等脚本 |
-| `templates/patent_formula_manifest.yaml` | 关键公式 manifest 模板，用于公式编号、量纲校核和 DOCX 数学 QA |
-| `examples/` | 脱敏示例原材料；正式输出应写入用户案件目录 |
+| 目录/入口 | 职责 | 不承担的职责 |
+|---|---|---|
+| `SKILL.md` | 意图识别、模式路由、全局不变量、资源索引 | 阶段执行细节与版本历史 |
+| `prompts/` | 定义每个工作阶段的操作契约、输入、输出和门禁 | 维护跨阶段稳定事实 |
+| `references/` | 维护法律/业务口径、证据模型和专业规则 | 编排具体案件步骤 |
+| `templates/` | 提供结构化记录、数据合同和交付骨架 | 作为独立权威规则源 |
+| `tools/` | 执行确定性的转换、提取、校验、渲染和留档 | 替代 Agent 的语义判断 |
+| `tests/` | 固化机器行为、事实一致性和回归边界 | 代替真实案件人工复核 |
+| `examples/` | 提供示例输入材料 | 存放正式案件产物 |
+| `docs/` | 说明产品定位与架构 | 复制完整文件映射或执行规则 |
+
+具体文件映射只在 `SKILL.md` 的资源索引维护，本文件不保留第三份手工清单。
+
+## 三层关系
+
+主执行链分为三层；templates 作为三层之间的结构化数据契约：
+
+```text
+prompts（编排：现在做什么、输入输出是什么）
+    ↓ 按需引用
+references（事实：按什么稳定口径判断）
+    ↓ 形成结构化输入
+tools（执行：转换、检索辅助、校验、渲染、留档）
+```
+
+- prompt 只能引用 reference，不应复制并改写一套稳定口径。
+- reference 不调用具体工具，也不决定某案件的步骤顺序。
+- tool 只处理可确定验证的事实；逻辑闭环、权利要求一致性和公式语义仍由 Agent 自审。
+- template 承接 prompt 输出，并向 tool 提供可解析字段；模板本身不得另立冲突规则。
+
+## 数据流与审查闭环
+
+```text
+用户意图与材料
+  → SKILL 路由工作模式
+  → prompt 建立阶段任务
+  → reference 提供权威口径
+  → template 固化结构化中间产物
+  → tool 生成证据、文档与机器检查结果
+  → Agent 语义自审并修订
+  → 机器门禁复验
+  → 用户案件目录交付
+  → 新材料/代理意见进入 revise；意见可来自批注 DOCX 或文字类来源，另存 producer 版本并再次自审
+```
+
+查新输出按方向记录 `risk_grade: A/B/C/null` 与 `evaluation_status`；证据不足、检索受阻或待核验时不得伪造风险等级。
 
 ## 用户产出约定
 
-推荐路径：
-
-```text
-outputs/{案件标识}/
-```
-
-凡向用户交付的交底书 `.md` / `.docx` 文件名须为：
+推荐案件目录为 `outputs/{案件标识}/`。凡向用户交付的交底书 `.md` / `.docx` 使用同名时间戳：
 
 ```text
 {案件名}_{YYYYMMDDHHmmss}.md
 {案件名}_{YYYYMMDDHHmmss}.docx
+{案件名}_{YYYYMMDDHHmmss}_{producer}.md   # 多 Agent 并行
+{案件名}_{YYYYMMDDHHmmss}_{producer}.docx
 ```
 
-首次定稿和迭代稿均适用，不默认覆盖旧稿。
+首次定稿和迭代稿均适用，不默认覆盖旧稿；不同 producer 可并存，由用户选择。

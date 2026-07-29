@@ -128,6 +128,7 @@ def test_no_comments_xml_returns_empty(tmp_path: Path) -> None:
 def test_cli_json_and_markdown_output(tmp_path: Path) -> None:
     docx = _build_docx(tmp_path / "reviewed.docx")
     out_md = tmp_path / "comments.md"
+    out_json = tmp_path / "comments.json"
 
     result = subprocess.run(
         [
@@ -137,6 +138,10 @@ def test_cli_json_and_markdown_output(tmp_path: Path) -> None:
             str(docx),
             "--output",
             str(out_md),
+            "--json-output",
+            str(out_json),
+            "--producer",
+            "codex",
         ],
         capture_output=True,
         text=True,
@@ -151,6 +156,14 @@ def test_cli_json_and_markdown_output(tmp_path: Path) -> None:
     assert payload["comment_count"] == 3
     assert payload["top_level_count"] == 2
     assert payload["reply_count"] == 1
+    assert payload["schema_version"] == "1.0"
+    assert payload["producer"] == "codex"
+    assert payload["source"]["verbatim_status"] == "source_exact"
+    assert payload["count"]["status"] == "verified"
+    assert len(payload["source"]["sha256"]) == 64
+    assert json.loads(out_json.read_text(encoding="utf-8")) == payload
+    assert payload["comments"][0]["text_sha256"]
+    assert payload["comments"][0]["source_locator"]["type"] == "docx_comment"
     md_text = out_md.read_text(encoding="utf-8")
     assert "代理批注提取与定位索引" in md_text
     assert "校核台账" in md_text

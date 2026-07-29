@@ -1,5 +1,14 @@
 # 迭代上下文（进入 merger / correction 前必读）
 
+## 局部执行契约
+
+- **Purpose**：为已有交底书的增量修订选择正确分支，固定基线并保证新版本、日志和门禁证据可追溯。
+- **Inputs**：当前基准稿、本轮用户说明及补充材料；代理意见修订还包括意见来源（批注 DOCX、文字、消息导出、转述或 OCR）、规范原文包和基线/修订根目录。
+- **Outputs**：路由决定、保留基线的新时间戳稿、修订与交付记录；代理意见修订还包括原文包、矩阵、回复、经验回写及 C16/C17 所需结构化锚点。
+- **Must**：先读基准稿再修订；另存新版本；架构实质变化时补充查新；DOCX 格式意见经渲染核对。
+- **Must not**：无故重跑专利点挖掘；覆盖旧稿；用旧查新结论覆盖新架构；把纯文本提取缺失当作 Word 缺陷。
+- **Completion criteria**：路由、基线、新稿、相关门禁输入、修订日志和交付状态互相一致，所有强制产物已落盘。
+
 ## 本文作用
 
 约定**迭代时先干什么、产出什么**，避免 Agent 只读了合并/纠正模板却转去跑 **Step 3–4 专利点分析**或空泛「更新分析」而不落盘新稿。
@@ -14,7 +23,7 @@
 |------|------------|
 | 补充文档、扩展方案、合并新材料 | `merger.md` |
 | 指出错误、与事实/参数不符、风格或保护点调整 | `correction_handler.md` |
-| 提供**带批注的审阅 DOCX**（代理人预审意见等），或要求提取/逐条处理/回复代理意见 | `review_comment_closure.md`（提取+锚点+overlay）→ `correction_handler.md`（分诊+改稿） |
+| 提供批注 DOCX、逐字文字、消息导出、转述或 OCR，或要求提取/逐条处理/回复代理意见 | `review_comment_closure.md`（冻结来源+原文包+锚点+overlay）→ `correction_handler.md`（分诊+改稿） |
 | 用户已按 `disclosure_builder.md` §7.6 声明侧重点，仅需 **第五章权利要求书式强化**（取向须与本稿已有材料及第五、三章已写观点一致，**禁止**为交互而编造新场景） | `merger.md`（以最近定稿为基准，合并范围以第五章为主，必要时微调第四章与第五章衔接句） |
 
 ---
@@ -29,9 +38,11 @@
 **输出**
 
 - 合并或纠正后的全文写入**新文件**，不得默认覆盖旧稿：  
-  **`{规范化案件名}_{YYYYMMDDHHmmss}.md`** + **`mermaid_render.py` 生成的同名 `.docx`**。  
+  **`{规范化案件名}_{YYYYMMDDHHmmss}.md`** + **`mermaid_render.py` 生成的同名 `.docx`**；多 Agent 并行时追加 `_{producer}`。不同 Agent 版本可并存，由用户选择，不强制合并成唯一版本。
 - 与 **Step 7 首次定稿**为**同一命名规则**（凡落盘交付均带时间戳），详见 **`disclosure_builder.md` §7.3 第 5 点**。  
 - 旧版 `.md`/`.docx` 保留在同目录，便于对照（用户明确要求覆盖时再覆盖）。
+
+批注闭环还须保留可供 C16/C17 对照的**基线稿/基线根目录**与**修订稿/修订根目录**；不得在门禁前删除、覆盖或就地改写基线。无基线时 C17 只能记录 WARN/SKIP，不能以“无法比较”为由判 FAIL。
 
 版本历史依赖**同目录下多个带时间戳的文件**，不需要 `iterations/` 子目录或快照脚本。
 
@@ -52,7 +63,7 @@
 **推荐**：在写出交付文件并生成 Word 之后，执行 **`Bash`**：
 
 ```text
-python3 ${CLAUDE_SKILL_DIR}/tools/iteration_dialog_log.py --case-dir "{案件目录}" --kind merge --user "{用户说明摘要}" --summary "{摘要摘录}" --artifacts "{案件名_时间戳.md},{案件名_时间戳.docx}"
+python <SKILL_ROOT>/tools/iteration_dialog_log.py --case-dir "{案件目录}" --kind merge --user "{用户说明摘要}" --summary "{摘要摘录}" --artifacts "{案件名_时间戳_producer.md},{案件名_时间戳_producer.docx}"
 ```
 
 `--kind` 纠正时用 `correct`。若无法执行脚本，须 **`Read`** 已有 `交底书修订对话记录.md`（若无则 **`Write`** 创建），再 **`StrReplace`** 或等价方式在文末**追加**与上表结构相同的一条（时间须真实）。
@@ -74,7 +85,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/iteration_dialog_log.py --case-dir "{案件目
 推荐在写出交付文件、生成 Word 并完成 `disclosure_self_check.md` §8.5 后执行：
 
 ```text
-python3 ${CLAUDE_SKILL_DIR}/tools/delivery_check_log.py --case-dir "{案件目录}" --status WARN --summary "{检查摘要}" --pending "{待补项}" --artifacts "{案件名_时间戳.md},{案件名_时间戳.docx}" --checks "{关键检查结果}"
+python <SKILL_ROOT>/tools/delivery_check_log.py --case-dir "{案件目录}" --status WARN --summary "{检查摘要}" --pending "{待补项}" --artifacts "{案件名_时间戳_producer.md},{案件名_时间戳_producer.docx}" --checks "{关键检查结果}"
 ```
 
 `PASS` 仅表示“代理人审稿就绪”，不表示可直接提交专利局；`WARN` 必须列出待补项；`FAIL` 不得作为定稿交付。
@@ -83,7 +94,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/delivery_check_log.py --case-dir "{案件目�
 
 ## 架构变化触发补充查新（迭代硬门禁）
 
-迭代中若本轮修改导致以下任一**实质变化**，须在定稿前执行**针对性补充检索**（按 `prior_art_search.md` 证据规则，聚焦新主线拥挤度），**不得沿用旧查新结论直接定稿**：数据来源或主要证据模态变化（如量测主线 ↔ 影像主线）、定位方式/观测层级变化、核心决策链重构、独权主线迁移。补充查新记录落案件目录并回写等级；等级下调时联动收缩保护点。判断标准与实证见 **`references/observability_and_multimodal_evidence.md` §五**。
+迭代中若本轮修改导致以下任一**实质变化**，须在定稿前执行**针对性补充检索**（按 `prior_art_search.md` 证据规则，聚焦新主线拥挤度），**不得沿用旧查新结论直接定稿**：数据来源或主要证据模态变化（如量测主线 ↔ 影像主线）、定位方式/观测层级变化、核心决策链重构、独权主线迁移。补充查新记录落案件目录并回写 `risk_grade` 与 `evaluation_status`；风险升高、转为暂不评级或出现待核验/受阻状态时，联动收缩保护点或暂停定稿。判断标准与实证见 **`references/observability_and_multimodal_evidence.md` §五**。
 
 ---
 
@@ -105,7 +116,8 @@ python3 ${CLAUDE_SKILL_DIR}/tools/delivery_check_log.py --case-dir "{案件目�
 4. **`Write`** 新时间戳 `.md` → 运行 **`mermaid_render.py -o`** 写出定稿图与 **`.docx`**。
 5. 追加 **`交底书修订对话记录.md`**（**`iteration_dialog_log.py`** 或手工），见上文「修订对话记录」。
 6. 按 `disclosure_self_check.md` §8.5 追加 **`交底书交付检查记录.md`**（**`delivery_check_log.py`** 或手工）。
-7. 在回复中写明新文件路径，并输出该模板要求的 **「合并摘要（留档）」**或 **「纠正摘要（留档）」**，同时简要说明 PASS/WARN/FAIL 与待补项。
+7. 代理意见轮次按 `review_comment_closure.md` R7 生成经验回写；一般修订可省略。
+8. 在回复中写明新文件路径，并输出该模板要求的 **「合并摘要（留档）」**或 **「纠正摘要（留档）」**，同时简要说明 PASS/WARN/FAIL 与待补项。
 
 ---
 

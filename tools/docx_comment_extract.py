@@ -23,19 +23,23 @@ reported per comment. This keeps the attorney's original comments separable
 from the applicant's replies in a 回复-round DOCX.
 
 Outputs:
+- canonical JSON file (``--json-output``), recommended as downstream truth;
 - optional Markdown listing (``--output``): 批注定位索引 table + per-comment
   blocks with the original comment text verbatim (never rewritten or merged);
 - final line ``COMMENT_EXTRACT_JSON {...}`` for machine consumption.
 
 Usage:
-  python3 tools/docx_comment_extract.py --input reviewed.docx [--output comments.md]
+  python3 tools/docx_comment_extract.py --input reviewed.docx \
+    --json-output comments.json [--output comments.md]
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -83,6 +87,26 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1] + "…"
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+        delete=False,
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    ) as handle:
+        handle.write(text)
+        temp_path = Path(handle.name)
+    temp_path.replace(path)
 
 
 def parse_comments_xml(data: bytes) -> list[CommentMeta]:
@@ -324,6 +348,67 @@ def render_markdown(docx_path: Path, comments: list[CommentMeta]) -> str:
     return "\n".join(lines)
 
 
+def build_payload(
+    docx_path: Path,
+    comments: list[CommentMeta],
+    *,
+    producer: str,
+) -> dict[str, object]:
+    source_bytes = docx_path.read_bytes()
+    top_level_count = sum(1 for m in comments if not m.is_reply)
+    reply_count = sum(1 for m in comments if m.is_reply)
+    return {
+        "schema_version": "1.0",
+        "tool": "docx_comment_extract",
+        "producer": producer,
+        "source": {
+            "type": "reviewed_docx",
+            "file": str(docx_path),
+            "sha256": _sha256_bytes(source_bytes),
+            "verbatim_status": "source_exact",
+        },
+        # Legacy summary keys remain for C14 and existing case files.
+        "input": str(docx_path),
+        "comment_count": len(comments),
+        "top_level_count": top_level_count,
+        "reply_count": reply_count,
+        "count": {
+            "top_level": top_level_count,
+            "replies": reply_count,
+            "basis": "docx_comment_threads",
+            "status": "verified",
+        },
+        "comments": [
+            {
+                "seq": m.seq,
+                "source_native_id": m.docx_id,
+                "docx_id": m.docx_id,
+                "author": m.author,
+                "date": m.date,
+                "kind": m.kind,
+                "is_reply": m.is_reply,
+                "parent_docx_id": m.parent_docx_id,
+                "done": m.done,
+                "anchor_excerpt": m.anchor_excerpt,
+                "context_paragraph": m.context_paragraph,
+                "paragraph_index": m.paragraph_index,
+                "text": m.text,
+                "text_sha256": _sha256_bytes(m.text.encode("utf-8")),
+                "source_locator": {
+                    "type": "docx_comment",
+                    "value": m.docx_id,
+                    "paragraph_index": m.paragraph_index,
+                },
+                "target_confirmation": (
+                    "range_exact" if m.kind == "range" else "needs_human"
+                ),
+                "subrequirements": [],
+            }
+            for m in comments
+        ],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # Windows console defaults to GBK
@@ -333,6 +418,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", required=True, help="reviewed .docx path")
     parser.add_argument(
         "--output", help="optional Markdown listing path (批注定位索引)"
+    )
+    parser.add_argument(
+        "--json-output",
+        help="canonical JSON output path (recommended for downstream gates)",
+    )
+    parser.add_argument(
+        "--producer",
+        default="unspecified",
+        help="producer label such as codex, claude, human, or unspecified",
     )
     args = parser.parse_args(argv)
 
@@ -348,34 +442,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.output:
         out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(render_markdown(docx_path, comments), encoding="utf-8")
+        _atomic_write(out_path, render_markdown(docx_path, comments))
         print(f"markdown written: {out_path}")
 
-    payload = {
-        "tool": "docx_comment_extract",
-        "input": str(docx_path),
-        "comment_count": len(comments),
-        "top_level_count": sum(1 for m in comments if not m.is_reply),
-        "reply_count": sum(1 for m in comments if m.is_reply),
-        "comments": [
-            {
-                "seq": m.seq,
-                "docx_id": m.docx_id,
-                "author": m.author,
-                "date": m.date,
-                "kind": m.kind,
-                "is_reply": m.is_reply,
-                "parent_docx_id": m.parent_docx_id,
-                "done": m.done,
-                "anchor_excerpt": m.anchor_excerpt,
-                "context_paragraph": m.context_paragraph,
-                "paragraph_index": m.paragraph_index,
-                "text": m.text,
-            }
-            for m in comments
-        ],
-    }
+    payload = build_payload(docx_path, comments, producer=args.producer)
+    if args.json_output:
+        json_path = Path(args.json_output)
+        _atomic_write(
+            json_path,
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        )
+        print(f"json written: {json_path}")
     print("COMMENT_EXTRACT_JSON " + json.dumps(payload, ensure_ascii=False))
     return 0
 

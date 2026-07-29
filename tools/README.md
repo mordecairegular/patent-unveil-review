@@ -165,7 +165,7 @@ python3 tools/md_to_docx.py -i ./outputs/case/disclosure.md -o ./outputs/case/di
 python3 tools/md_to_docx.py -i a.md -o a.docx --image-max-width-inches 6 --image-max-height-inches 9
 ```
 
-在 Claude Code 中可将 `tools` 换为 `${CLAUDE_SKILL_DIR}/tools`。
+从其他工作目录运行时，将 `tools` 换为 `<SKILL_ROOT>/tools`。
 
 ### 支持的 Markdown 子集
 
@@ -199,7 +199,7 @@ python3 tools/md_to_docx.py -i a.md -o a.docx --image-max-width-inches 6 --image
 - `media_count`：DOCX 内嵌资源数量；`--min-media-count N` 可要求至少嵌入 N 个图示/图片。
 - `code_style_count`：检测 DOCX XML 中的 Consolas/代码样式；默认 FAIL，排障时可用 `--allow-code-style` 放行。
 - `word_auto_numbering_count`：检测 Word 自动编号结构 `<w:numPr>`；默认 FAIL，避免局部列表跨章节续号。
-- `suspicious_text_count` / `failed_patterns`：发现 `frac{`、`mathrm{`、`\(`、`\)`、`\[`、`\]`、`begin{`、`end{`、`$`、裸下划线变量、LaTeX 命令残留，或 `flowchart TB` / `graph TD` 等未渲染 mermaid 源码则 FAIL。
+- `suspicious_text_count` / `failed_patterns`：发现 `frac{`、`mathrm{`、`\(`、`\)`、`\[`、`\]`、`begin{`、`end{`、`$`、裸下划线变量、LaTeX 命令残留，或 `flowchart TB` / `graph TD` 等未渲染 mermaid 源码则 FAIL；另只在 OMML 公式节点内检查反斜杠被吞后留下的裸命令，有 manifest 时对无法由有意标识符解释的长英文公式文本 fail-closed。
 - `--check-formal-text`：额外检查正式交底书正文中是否残留 Word/LaTeX 中间稿说明、DOCX QA 说明、案件证据包说明、商业库状态说明、Agent/脚本名等流程文字；正式交底书定稿必须开启。
 - `equation_number_count`：识别 `(1)`、`(2)` 等编号；传入 manifest 时检查缺失与重复。
 - 结构校验：manifest 中含 `\frac` 时要求 DOCX 内存在 `<m:f>`；含上下标时要求存在 OMML script 结构。
@@ -282,9 +282,33 @@ python3 tools/delivery_check_log.py --case-dir outputs/某案件 --status WARN \
   --next "交代理人复核权利要求布局。"
 ```
 
-- `--status`：`PASS` 表示代理人审稿就绪；`WARN` 表示阶段稿可交付但有待补项；`FAIL` 表示不得作为定稿交付。  
+- `--status`：内部 `PASS/WARN/FAIL` 对外分别显示“代理人审稿就绪 / 阶段稿，存在待补项 / 未达到交付条件”；`FAIL` 不得作为定稿交付。
 - `--log-name`：可选，默认 `交底书交付检查记录.md`；英文环境可改用 `disclosure_delivery_check_log.md`。  
 - 该文件跟随具体案件目录，不写入技能本体，也不复制进交底书正文。
+
+---
+
+## delivery_gate.py — 统一交付门禁（含修订闭环 C16/C17）
+
+`delivery_gate.py` 在原 C1–C15 基础上增加两项**结构验证**：
+
+- `C16 reply_anchors_resolvable`：读取 `批注处置矩阵.md` 及代理回复工作稿，校验 `STEP/DECISION/EQ/FIG/KP/SECTION/MVP/FILE/DELETE` 锚点语法、目标存在性、回复与矩阵登记一致性及删除是否成立。多个锚点以半角分号分隔。`待补充材料后落实`、`暂未落实`、`仅确认事实且无需修改文稿` 可不填锚点，但必须写明客观原因。定位到多个对象、编号重排或目标位于尚不支持的 Word 部件时输出 WARN，交人工复核。
+- `C17 claimed_changes_have_diff`：依赖基线，对 C16 可解析的声称修改做 diff。文本比较先做 Unicode NFKC、全半角、零宽字符、换行、无意义空白、Markdown 强调及常见标点/编号规范化；规范化后完全相同为 FAIL，相似度达到阈值为 WARN，明确新增、删除或内容/文件 hash 变化为 PASS。默认阈值为 `0.98`，可用 `--revision-similarity-threshold`（别名 `--similarity-threshold`）调整。缺基线只 WARN/SKIP，不误判 FAIL。
+
+```bash
+python3 tools/delivery_gate.py \
+  --case-dir outputs/case \
+  --md outputs/case/revision.md \
+  --docx outputs/case/revision.docx \
+  --comments-json outputs/case/comments.json \
+  --attorney-reply outputs/case/代理意见回复.md \
+  --revision-matrix outputs/case/批注处置矩阵.md \
+  --revision-root outputs/case \
+  --baseline-md outputs/case_baseline/disclosure.md \
+  --baseline-root outputs/case_baseline
+```
+
+`--revision-root` 缺省为 `--md` 所在目录。提供代理回复或基线即表示进入修订闭环，必须同时提供 `--revision-matrix`；若仅需执行旧版 C14 计数，可显式 `--skip C16 --skip C17`。仅提供 `--baseline-root` 时，工具按修订稿相对于 `--revision-root` 的路径查找同名基线稿。C16 的 fallback 命中为 WARN，必须人工确认对象确为代理意见所指；C16 失败时 C17 记录 `not_evaluated`，不会伪装成 PASS。C16/C17 会写入末行 `DELIVERY_GATE_JSON` 并参与总状态与退出码。它们只证明锚点可核对且检测到结构变化，**不声称修改在专业性、充分性或语义上已经解决代理意见**。
 
 ---
 
@@ -296,12 +320,35 @@ python3 tools/delivery_check_log.py --case-dir outputs/某案件 --status WARN \
 
 ```bash
 python3 tools/docx_comment_extract.py --input "某案件预审意见_审阅版.docx" \
-  --output "outputs/某案件/批注提取_20260714.md"
+  --json-output "outputs/某案件/代理意见原文包_20260714153000_codex.json" \
+  --output "outputs/某案件/代理意见原文包_20260714153000_codex.md" \
+  --producer codex
 ```
 
-- 末行输出单行 **`COMMENT_EXTRACT_JSON`**（含 `comment_count` / `top_level_count` / `reply_count` 与逐条明细），供 Agent 机器读取。
+- `--json-output` 写规范 JSON 原文包，含 source、条数口径、逐条原文哈希、原生定位和目标确认状态；该文件是 C14 输入。
+- 末行输出单行 **`COMMENT_EXTRACT_JSON`**，供流水线读取。
 - `--output` 可选：生成「批注定位索引」Markdown（索引表 + 逐条原文 fenced block）。
 - 点批注的**作用范围**（可能针对整节/整图）工具不判断，由 Agent 按 `review_comment_closure.md` R2 补判。
+
+---
+
+## attorney_comment_import.py — 文字代理意见导入
+
+用户未提供批注 DOCX、而是直接粘贴文字、给消息导出、转述或 OCR 时，先原样保存输入，再导入同一个规范 JSON：
+
+```bash
+python3 tools/attorney_comment_import.py \
+  --input "outputs/某案件/代理意见输入_20260714153000_codex.txt" \
+  --source-type pasted_text \
+  --output-json "outputs/某案件/代理意见原文包_20260714153000_codex.json" \
+  --output-md "outputs/某案件/代理意见原文包_20260714153000_codex.md" \
+  --producer codex
+```
+
+- 明确编号才自动拆条；无编号文本默认一条并标记 `count.status=provisional`。
+- `--split-paragraphs` 仅在用户同意暂按段落拆分时使用，仍为 provisional。
+- `user_paraphrase` / `ocr_source` 标记为 `transcribed_or_paraphrased`，不得冒充逐字 DOCX 批注。
+- 规范结构见 `templates/attorney_comments.schema.json`。
 
 ---
 
@@ -338,7 +385,7 @@ python3 tools/docx_to_md.py -i ./raw/spec.docx -o ./knowledge/spec.md --media-di
 - **Markdown 输出在 mammoth 侧标记为 deprecated**，复杂排版可能弱于「先导出 HTML 再转 MD」；专利扫描一般足够。若版式崩坏，建议所内 **另存为 PDF 或纯文本** 再扫。
 - **WMF/EMF** 等 Windows 图元可能需单独处理（见 [mammoth WMF 配方](https://github.com/mwilliamson/python-mammoth)）。
 
-在 Claude Code 中可将 `tools` 换为 `${CLAUDE_SKILL_DIR}/tools`。Windows 无 `python3` 时用 `python`。
+从其他工作目录运行时，将 `tools` 换为 `<SKILL_ROOT>/tools`。Windows 无 `python3` 时用 `python`。
 
 ---
 
@@ -375,7 +422,7 @@ python3 tools/pptx_to_md.py -i ./raw/deck.pptx -o ./knowledge/deck.md --media-di
 - **图表、SmartArt、嵌入 OLE** 等若未以普通图片形状存在，**不会**自动栅格化为 PNG；可先在 PowerPoint 中另存为图片或导出 PDF 作补充材料。
 - 文本按形状遍历顺序输出，与视觉阅读顺序可能略有差异。
 
-在 Claude Code 中可将 `tools` 换为 `${CLAUDE_SKILL_DIR}/tools`。Windows 无 `python3` 时用 `python`。
+从其他工作目录运行时，将 `tools` 换为 `<SKILL_ROOT>/tools`。Windows 无 `python3` 时用 `python`。
 
 ---
 

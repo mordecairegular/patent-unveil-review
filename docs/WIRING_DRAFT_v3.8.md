@@ -16,7 +16,7 @@ python tools/delivery_gate.py --case-dir <案件目录> --md <交付.md> --docx 
 
 ## 建议写入 disclosure_self_check.md §8.5 的门禁步骤
 
-1. 确认 `.md` 与 `.docx` 同时存在，文件名符合 `{案件名}_{YYYYMMDDHHmmss}`。
+1. 确认 `.md` 与 `.docx` 同时存在，文件名符合 `{案件名}_{YYYYMMDDHHmmss}`；多 Agent 并行时可追加 `_{producer}`。
 2. 确认确认点 3 签核产物、确认点 4 预览确认记录已落盘；如用户明确跳过确认点 4，运行 gate 时传入 `--preview-skipped`。
 3. 运行 `tools/delivery_gate.py`，含公式清单时传入 `--manifest`，含关键数值复核时传入 `--numeric-spec`。
 4. 以 `DELIVERY_GATE_JSON` 最后一行为准记录状态；非 `FAIL` 才能进入交付对话。

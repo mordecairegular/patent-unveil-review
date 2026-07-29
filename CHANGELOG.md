@@ -4,6 +4,34 @@
 
 ---
 
+## v3.12.0 (2026-07-29) - Multi-source attorney revision, fail-closed math QA, and host-neutral learning loop
+
+This release consolidates lessons from a multi-agent attorney-opinion revision round. It intentionally does **not** require hashes for disclosure publication and does **not** force one surviving “final” document.
+
+- **Multi-source attorney opinions**: add `attorney_comment_import.py` and a shared `attorney_comments.schema.json`. Commented DOCX, pasted text, message exports, user paraphrases, OCR, and structured tables now enter the same canonical package. Explicit numbering is the only automatic top-level split; unnumbered prose stays one provisional item unless the user opts into paragraph splitting. Paraphrase/OCR provenance cannot masquerade as verbatim DOCX comments.
+- **Canonical DOCX extraction**: `docx_comment_extract.py` gains atomic `--json-output`, source provenance, producer, verified count basis, per-comment source locator/text digest, and target-confirmation fields while retaining legacy C14 summary keys.
+- **Formula silent-degradation gate**: `qa_docx_math.py` scans OMML-only text for swallowed-backslash command names (including the observed `sqrt`, `tilde`, `ell`, `zeta`, `sim`, `kappa`, `Xi`, and `varphi` failure family). With a formula manifest, unknown long alphabetic math text fails closed unless explainable by intentional manifest identifiers.
+- **Anchor-certification correction**: explicit and fallback anchor regexes no longer prefix-match hierarchical identifiers such as `EQ:2` against `EQ:2.1`. `AnchorBlock` records strong/fallback provenance; fallback can only WARN pending human confirmation, and C17 treats it as uncertain. If C16 fails, C17 is `not_evaluated`, never a clean PASS.
+- **Continuous lesson absorption**: each attorney-opinion round now produces `代理意见经验回写_{timestamp}_{producer}.md`, classifying case facts, reusable rules, deterministic tests, and unproven risks. Only de-identified, reviewed, evidenced lessons enter the public Skill or regression suite.
+- **Shared core, thin host adapters**: remove host-specific path variables from core prompts and add minimal Codex/Claude adapter profiles/snippets. Global AGENTS/CLAUDE instructions stay short and route into the same domain core.
+- **Coexisting producer outputs**: timestamped `_codex`, `_claude`, or other producer files may coexist; historical work is preserved and the user decides which version to adopt. Source hashes remain available for provenance/reproduction, not as a disclosure release requirement.
+
+---
+
+## v3.11.0 (2026-07-17) - Simplification, consistency, and revision closure
+
+This release deliberately consolidates the v3.10 feature set instead of adding new patent-review rules.
+
+- **Slim Skill entrypoint**: reduce `SKILL.md` to positioning, five intent modes (`mine`, `search`, `draft`, `revise`, `full`), global invariants G1–G8, resource routing, and the unified delivery entrypoint. Move version history and stage details back to their canonical prompt/reference/tool files.
+- **Protection-object canon**: make the machine-readable `protection-objects` block in `references/method_system_patent_guide.md` §三 the sole current source for the five optional protection objects; add a repository consistency test and remove active four-object drift.
+- **Workflow cleanup**: remove the default confidentiality interaction and gate, add only the `所属技术领域` template field, use neutral access-control wording for public-search automation, map internal PASS/WARN/FAIL to unambiguous user-facing delivery labels, and simplify the hand-maintained documentation map.
+- **Search-result semantics**: separate patent-risk grade (`A | B | C | null`) from evaluation status (`rated`, `insufficient_evidence`, `search_blocked`, `pending_verification`). Read legacy `D` / `partial-D` as compatibility input only; do not emit D as a new user-facing risk grade.
+- **Attorney-revision contract**: preserve verbatim comments while recording comment understanding, internal triage, external implementation status, human-readable locations, machine anchors, MVP/calculation impact, linked artifacts, and CLOSED/PARTIAL/OPEN closure state. Standardize `STEP`, `DECISION`, `EQ`, `FIG`, `KP`, `SECTION`, `MVP`, `FILE`, and `DELETE` anchors.
+- **C16/C17 revision gates**: validate that claimed modification anchors resolve, and that claimed changes have a corresponding baseline-to-revision diff. Exact equality fails, near-format-only changes warn at a configurable 0.98 threshold, missing/ambiguous baselines warn or skip, and file/MVP/deletion anchors receive dedicated checks.
+- **Visual evidence and behavioral regression**: require reading images that carry numbered figures, architecture/flow/sequence/circuit/layout/experiment semantics, or indispensable spatial/data/control relationships. Add ten first-stage golden behavior cases and a cross-agent manual runbook.
+
+---
+
 ## v3.10.0 (2026-07-15) - Technical evidence contract + observability/multimodal-evidence gates
 
 Second-wave retrospective on the 16-comment case (identifiers kept out of this public repo). Root cause behind the surface issues ("undefined terms, unclear steps, contradictory conditions"): the skill demanded input/processing/output clarity but never forced a pre-drafting **"technical facts — observation capability — evidence responsibility — decision logic" contract**, so the AI could write "linguistically complete, technically leaping" schemes — aggregate-level measurements claimed to localize inside a unit, a manufacturer standard-condition curve conflated with the live field response, one modality doing screening+localization+attribution+decision at once, body text saying AND while the flowchart drew OR.

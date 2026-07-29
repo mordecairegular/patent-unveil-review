@@ -178,6 +178,48 @@ def test_attorney_reply_missing_entry_fails_then_full_passes(tmp_path: Path) -> 
     assert outcome.fail_items == []
 
 
+def test_attorney_reply_canonical_provisional_count_warns(tmp_path: Path) -> None:
+    text = "请补充公式来源。"
+    comments = {
+        "schema_version": "1.0",
+        "source": {
+            "type": "pasted_text",
+            "file": "comments.txt",
+            "sha256": "0" * 64,
+            "verbatim_status": "source_exact",
+        },
+        "count": {
+            "top_level": 1,
+            "replies": 0,
+            "basis": "single_unstructured_source",
+            "status": "provisional",
+        },
+        "comments": [
+            {
+                "seq": "C01",
+                "is_reply": False,
+                "text": text,
+                "text_sha256": "1" * 64,
+                "source_locator": {"type": "line_range", "value": "L1-L1"},
+                "target_confirmation": "needs_human",
+                "subrequirements": [],
+            }
+        ],
+    }
+    comments_json = tmp_path / "comments.json"
+    comments_json.write_text(json.dumps(comments, ensure_ascii=False), encoding="utf-8")
+    reply = tmp_path / "reply.md"
+    reply.write_text("### C01｜关于公式来源\n已处理。\n", encoding="utf-8")
+
+    outcome = delivery_gate.check_attorney_reply(comments_json, reply)
+
+    assert outcome.fail_items == []
+    assert any(
+        item["reason"] == "comment_count_provisional"
+        for item in outcome.warn_items
+    )
+
+
 def test_impl_params_flagged_in_independent_region_only(tmp_path: Path) -> None:
     md = tmp_path / "body.md"
     md.write_text(

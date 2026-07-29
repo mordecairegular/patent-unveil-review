@@ -183,6 +183,15 @@ def test_filename_convention_warns_on_bad_name(tmp_path: Path) -> None:
     assert outcome.warn_items[0]["same_stem"] is False
 
 
+def test_filename_convention_accepts_producer_suffix(tmp_path: Path) -> None:
+    md = tmp_path / "技术交底书_20260729120000_codex.md"
+    docx = tmp_path / "技术交底书_20260729120000_codex.docx"
+
+    outcome = delivery_gate.check_filename_convention(md, docx)
+
+    assert outcome.status == "PASS"
+
+
 def test_fuzzy_qualifier_scan_flags_unquantified_not_quantified(tmp_path: Path) -> None:
     md = tmp_path / "body.md"
     md.write_text(

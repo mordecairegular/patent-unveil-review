@@ -11,10 +11,13 @@ import argparse
 import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import difflib
+import hashlib
 import io
 import json
 import re
 import sys
+import unicodedata
 import zipfile
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -27,7 +30,7 @@ NS = {
 
 CHECK_IDS = (
     "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11",
-    "C12", "C13", "C14", "C15",
+    "C12", "C13", "C14", "C15", "C16", "C17",
 )
 
 PLACEHOLDER_RE = re.compile(r"待填|待补充|待确认|待核|TODO|TBD|\[待填写\]|【待填写】", re.I)
@@ -36,7 +39,7 @@ USER_FILL_LINE_RE = re.compile(
 )
 USER_FILL_MARKER_RE = re.compile(r"（用户自填）|\[待填写\]|待填写")
 FIELD_LABEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}\b")
-FILENAME_RE = re.compile(r"^.+_\d{14}\.(md|docx)$", re.I)
+FILENAME_RE = re.compile(r"^.+_\d{14}(?:_[A-Za-z0-9-]+)?\.(md|docx)$", re.I)
 NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 DEFENSIVE_PHRASE_RE = re.compile(r"不在于|不作为|不强制|不以|不宜|显著降低")
 # 高信号模糊限定词（判定语境常被代理人追问“具体数值/条件是什么”）；
@@ -878,10 +881,92 @@ def check_attorney_reply(comments_json: Path | None, reply_path: Path | None) ->
     except json.JSONDecodeError as exc:
         outcome.fail_items.append({"file": comments_json.name, "issue": f"批注 JSON 解析失败：{exc}"})
         return outcome
-    top_level = [c for c in payload.get("comments", []) if not c.get("is_reply")]
+    canonical = bool(payload.get("schema_version"))
+    if canonical:
+        source = payload.get("source")
+        count = payload.get("count")
+        if not isinstance(source, dict) or not {
+            "type",
+            "file",
+            "sha256",
+            "verbatim_status",
+        } <= set(source):
+            outcome.fail_items.append(
+                {
+                    "file": comments_json.name,
+                    "reason": "canonical_source_invalid",
+                    "issue": "规范批注 JSON 缺少完整 source 溯源字段",
+                }
+            )
+        if not isinstance(count, dict) or not {
+            "top_level",
+            "replies",
+            "basis",
+            "status",
+        } <= set(count):
+            outcome.fail_items.append(
+                {
+                    "file": comments_json.name,
+                    "reason": "canonical_count_invalid",
+                    "issue": "规范批注 JSON 缺少完整 count 口径字段",
+                }
+            )
+        elif count.get("status") != "verified":
+            outcome.warn_items.append(
+                {
+                    "file": comments_json.name,
+                    "reason": "comment_count_provisional",
+                    "basis": count.get("basis"),
+                    "issue": "代理意见条数为暂定口径，须由用户确认后再对外称完整覆盖",
+                }
+            )
+        for index, comment in enumerate(payload.get("comments", []), start=1):
+            if not isinstance(comment, dict) or not {
+                "seq",
+                "text",
+                "text_sha256",
+                "source_locator",
+                "target_confirmation",
+                "subrequirements",
+            } <= set(comment):
+                outcome.fail_items.append(
+                    {
+                        "file": comments_json.name,
+                        "reason": "canonical_comment_invalid",
+                        "item": index,
+                        "issue": "规范批注条目缺少原文、定位或确认状态字段",
+                    }
+                )
+    top_level = [
+        c
+        for c in payload.get("comments", [])
+        if isinstance(c, dict) and not c.get("is_reply")
+    ]
     expected = {str(c.get("seq") or "").upper() for c in top_level if c.get("seq")}
     if not expected:
-        expected = {f"C{i:02d}" for i in range(1, int(payload.get("top_level_count", 0)) + 1)}
+        count_block = payload.get("count")
+        declared = (
+            count_block.get("top_level", 0)
+            if isinstance(count_block, dict)
+            else payload.get("top_level_count", 0)
+        )
+        expected = {f"C{i:02d}" for i in range(1, int(declared) + 1)}
+    count_block = payload.get("count")
+    declared_top_level = (
+        int(count_block.get("top_level", 0))
+        if isinstance(count_block, dict)
+        else int(payload.get("top_level_count", 0))
+    )
+    if declared_top_level and declared_top_level != len(top_level):
+        outcome.fail_items.append(
+            {
+                "file": comments_json.name,
+                "reason": "comment_count_mismatch",
+                "declared": declared_top_level,
+                "parsed": len(top_level),
+                "issue": "批注条数声明与 comments 列表不一致",
+            }
+        )
     reply_text = reply_path.read_text(encoding="utf-8")
     found: set[str] = set()
     for match in re.finditer(r"^(?:#{2,4}\s*|\|\s*)C(\d{1,3})\b", reply_text, re.M):
@@ -935,6 +1020,1206 @@ def check_impl_params_in_claims(md_path: Path) -> CheckOutcome:
                     "token": match.group(0),
                     "content": _safe_text(raw),
                     "hint": "实施参数疑入独权区：独权改「预设周期/预设阈值」，具体数值移实施例或从属保护点",
+                }
+            )
+    return outcome
+
+
+REVISION_MATRIX_FIELDS = (
+    "批注编号",
+    "代理意见原文",
+    "意见理解",
+    "内部判断",
+    "对外状态",
+    "修改说明",
+    "人类可读位置",
+    "机器锚点",
+    "是否影响 MVP/计算",
+    "联动检查",
+    "最终状态",
+)
+REVISION_MATRIX_FIELD_ALIASES = {"MVP/计算影响": "是否影响 MVP/计算"}
+IMPLEMENTED_REPLY_STATUSES = {"已落实", "部分落实"}
+EXEMPT_REPLY_STATUSES = {
+    "待补充材料后落实",
+    "暂未落实",
+}
+ALLOWED_REPLY_STATUSES = IMPLEMENTED_REPLY_STATUSES | EXEMPT_REPLY_STATUSES
+FINAL_STATUS_BY_REPLY_STATUS = {
+    "已落实": "CLOSED",
+    "部分落实": "PARTIAL",
+    "待补充材料后落实": "OPEN",
+    "暂未落实": "OPEN",
+}
+MVP_IMPACT_VALUES = {"是", "否", "待判断"}
+ANCHOR_NAMESPACES = {"STEP", "DECISION", "EQ", "FIG", "KP", "SECTION", "MVP", "FILE"}
+WORD_PART_RE = re.compile(r"页眉|页脚|脚注|尾注|文本框|批注气泡|Word\s*XML|XML\s*部件", re.I)
+UNCERTAIN_MAPPING_RE = re.compile(r"重排|重编号|改编号|迁移|拆分|合并|移至|移到|编号调整")
+ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff]")
+EMPTY_MARKERS = {"", "-", "—", "–", "无", "暂无", "不适用", "n/a", "none"}
+# Only prose-like files receive presentation normalisation.  Source code and
+# structured data are hash-compared because whitespace and punctuation may be
+# semantically meaningful there.
+PROSE_TEXT_SUFFIXES = {".md", ".rst", ".txt"}
+
+
+@dataclass(frozen=True)
+class RevisionAnchor:
+    namespace: str
+    value: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.namespace}:{self.value}"
+
+    @property
+    def is_delete(self) -> bool:
+        return self.namespace == "DELETE"
+
+
+@dataclass
+class RevisionMatrixRow:
+    comment: str
+    status: str
+    change: str
+    location: str
+    anchor_text: str
+    mvp_impact: str
+    linked_checks: str
+    final_status: str
+
+
+@dataclass(frozen=True)
+class AnchorBlock:
+    line: int
+    text: str
+    matched_by: str
+
+
+@dataclass(frozen=True)
+class DiffEvidence:
+    anchor: str
+    category: str
+    similarity: float | None = None
+    detail: str | None = None
+
+
+def _normalise_comment_id(value: str) -> str:
+    match = re.fullmatch(r"C\s*0*(\d{1,3})", value.strip(), re.I)
+    if not match:
+        return value.strip().upper()
+    return f"C{int(match.group(1)):02d}"
+
+
+def _split_markdown_row(line: str) -> list[str] | None:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return None
+    stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    cells = re.split(r"(?<!\\)\|", stripped)
+    return [cell.replace(r"\|", "|").strip() for cell in cells]
+
+
+def _is_markdown_divider(cells: Sequence[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.replace(" ", "")) for cell in cells)
+
+
+def _parse_revision_matrix(path: Path) -> tuple[list[RevisionMatrixRow], list[str]]:
+    errors: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        return [], [f"修订矩阵不可读：{exc}"]
+
+    header_index: int | None = None
+    headers: list[str] = []
+    for index, line in enumerate(lines):
+        cells = _split_markdown_row(line)
+        if cells and "批注编号" in cells and "机器锚点" in cells:
+            header_index = index
+            raw_headers = [re.sub(r"[*_`]", "", cell).strip() for cell in cells]
+            headers = [REVISION_MATRIX_FIELD_ALIASES.get(cell, cell) for cell in raw_headers]
+            break
+    if header_index is None:
+        return [], ["未找到含“批注编号”和“机器锚点”的修订矩阵表"]
+
+    missing = [field for field in REVISION_MATRIX_FIELDS if field not in headers]
+    if missing:
+        errors.append("修订矩阵缺少字段：" + "、".join(missing))
+    rows: list[RevisionMatrixRow] = []
+    for line in lines[header_index + 1 :]:
+        if not line.strip():
+            if rows:
+                break
+            continue
+        cells = _split_markdown_row(line)
+        if cells is None:
+            if rows:
+                break
+            continue
+        if _is_markdown_divider(cells):
+            continue
+        if len(cells) != len(headers):
+            errors.append(f"修订矩阵列数不一致：期望 {len(headers)}，实际 {len(cells)}")
+            continue
+        data = dict(zip(headers, cells))
+        comment = _normalise_comment_id(data.get("批注编号", ""))
+        if not re.fullmatch(r"C\d{2,3}", comment):
+            errors.append(f"非法批注编号：{data.get('批注编号', '')}")
+            continue
+        rows.append(
+            RevisionMatrixRow(
+                comment=comment,
+                status=data.get("对外状态", "").strip(),
+                change=data.get("修改说明", "").strip(),
+                location=data.get("人类可读位置", "").strip(),
+                anchor_text=data.get("机器锚点", "").strip(),
+                mvp_impact=data.get("是否影响 MVP/计算", "").strip(),
+                linked_checks=data.get("联动检查", "").strip(),
+                final_status=data.get("最终状态", "").strip().upper(),
+            )
+        )
+    if not rows:
+        errors.append("修订矩阵没有可解析的批注行")
+    return rows, errors
+
+
+def _parse_attorney_reply(path: Path) -> tuple[dict[str, dict[str, str]], list[str]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return {}, [f"代理回复不可读：{exc}"]
+    heading_re = re.compile(r"^#{2,6}\s*(C\d{1,3})\s*[｜|]", re.M | re.I)
+    matches = list(heading_re.finditer(text))
+    if not matches:
+        return {}, ["代理回复未找到“### C01｜…”固定块"]
+    entries: dict[str, dict[str, str]] = {}
+    errors: list[str] = []
+    field_re = re.compile(
+        r"^[ \t]*(?:[-+][ \t]+)?(?:\*\*)?([^*：:\n]+?)(?:\*\*)?[ \t]*[：:][ \t]*(.*?)[ \t]*$",
+        re.M,
+    )
+    for index, match in enumerate(matches):
+        comment = _normalise_comment_id(match.group(1))
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        block = text[match.end() : end]
+        fields = {name.strip(): value.strip() for name, value in field_re.findall(block)}
+        if comment in entries:
+            errors.append(f"代理回复出现重复编号：{comment}")
+        entries[comment] = fields
+    return entries, errors
+
+
+def _is_meaningful(value: str) -> bool:
+    cleaned = value.strip().strip("`*_ ").lower()
+    return cleaned not in EMPTY_MARKERS
+
+
+def _is_no_change_exemption(status: str, change: str) -> bool:
+    if status in EXEMPT_REPLY_STATUSES:
+        return True
+    combined = f"{status} {change}"
+    return "仅确认事实" in combined and "无需修改" in combined
+
+
+def _parse_direct_anchor(token: str) -> tuple[RevisionAnchor | None, str | None]:
+    match = re.fullmatch(r"(STEP|DECISION|EQ|FIG|KP|SECTION|MVP|FILE):(.+)", token)
+    if not match:
+        return None, "锚点须使用受支持的大写命名空间"
+    namespace, value = match.group(1), match.group(2).strip()
+    if namespace == "STEP" and not re.fullmatch(r"S\d{1,4}", value):
+        return None, "STEP 编号须形如 S4"
+    if namespace == "DECISION" and not re.fullmatch(r"D\d{1,4}", value):
+        return None, "DECISION 编号须形如 D3"
+    if namespace in {"EQ", "FIG", "KP"} and not re.fullmatch(r"\d{1,4}(?:\.\d+)?", value):
+        return None, f"{namespace} 编号须为数字"
+    if namespace == "SECTION" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
+        return None, "SECTION 须为编号或 ASCII 稳定 ID"
+    if namespace in {"MVP", "FILE"}:
+        posix = value.replace("\\", "/")
+        parts = posix.split("/")
+        if (
+            not value
+            or posix.startswith("/")
+            or re.match(r"^[A-Za-z]:", posix)
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
+            return None, f"{namespace} 须为不越界的相对路径"
+    return RevisionAnchor(namespace, value), None
+
+
+def _parse_anchor_list(raw: str) -> tuple[list[RevisionAnchor], list[dict[str, str]]]:
+    value = raw.strip().strip("` ")
+    if value.lower() in EMPTY_MARKERS:
+        return [], []
+    anchors: list[RevisionAnchor] = []
+    errors: list[dict[str, str]] = []
+    for original in value.split(";"):
+        token = original.strip().strip("` ")
+        if not token:
+            errors.append({"anchor": original, "issue": "分号之间存在空锚点"})
+            continue
+        if token.startswith("DELETE:"):
+            nested = token.removeprefix("DELETE:")
+            target, err = _parse_direct_anchor(nested)
+            if err or target is None:
+                errors.append({"anchor": token, "issue": f"DELETE 目标非法：{err}"})
+                continue
+            anchors.append(RevisionAnchor("DELETE", target.label))
+            continue
+        anchor, err = _parse_direct_anchor(token)
+        if err or anchor is None:
+            errors.append({"anchor": token, "issue": err or "非法锚点"})
+            continue
+        anchors.append(anchor)
+    return anchors, errors
+
+
+def _delete_target(anchor: RevisionAnchor) -> RevisionAnchor:
+    target, err = _parse_direct_anchor(anchor.value)
+    if err or target is None:  # guarded by _parse_anchor_list
+        raise ValueError(f"invalid DELETE target: {anchor.value}")
+    return target
+
+
+def _normalise_for_search(text: str) -> str:
+    return ZERO_WIDTH_RE.sub("", unicodedata.normalize("NFKC", text))
+
+
+def _strong_anchor_pattern(anchor: RevisionAnchor) -> re.Pattern[str]:
+    value = re.escape(anchor.value)
+    explicit = (
+        rf"(?<![A-Za-z0-9._-]){anchor.namespace}:{value}"
+        rf"(?![A-Za-z0-9._-])"
+    )
+    if anchor.namespace == "STEP":
+        pattern = rf"(?:{explicit}|^\s*(?:#{{1,6}}\s*)?(?:[-+*]\s*)?(?:\*\*)?{value}(?=$|[\s、,:：;|）)]))"
+    elif anchor.namespace == "DECISION":
+        pattern = rf"(?:{explicit}|^\s*(?:#{{1,6}}\s*)?(?:[-+*]\s*)?(?:\*\*)?\|?\s*{value}(?=$|[\s、,:：;|）)]))"
+    elif anchor.namespace == "EQ":
+        pattern = rf"(?:{explicit}|\\tag\s*\{{\s*{value}\s*\}}|^\s*(?:公式|方程|式)\s*[(\[]?\s*{value}(?![\d.])\s*[)\]]?|^\s*[(]\s*{value}\s*[)]\s*$)"
+    elif anchor.namespace == "FIG":
+        pattern = rf"(?:{explicit}|^\s*(?:#{{1,6}}\s*)?(?:[-+*]\s*)?(?:\*\*)?(?:附图|图)\s*{value}(?![\d.])|!\[[^\]]*(?:附图|图)\s*{value}(?![\d.]))"
+    elif anchor.namespace == "KP":
+        pattern = rf"(?:{explicit}|^\s*(?:#{{1,6}}\s*)?(?:[-+*]\s*)?(?:\*\*)?(?:保护点|权利要求)\s*{value}(?![\d.]))"
+    else:  # SECTION
+        pattern = rf"(?:{explicit}|^\s*#{{1,6}}\s*(?:第\s*)?{value}(?=$|[\s、:：]))"
+    return re.compile(pattern, re.M | re.I)
+
+
+def _fallback_anchor_pattern(anchor: RevisionAnchor) -> re.Pattern[str]:
+    value = re.escape(anchor.value)
+    if anchor.namespace in {"STEP", "DECISION"}:
+        pattern = rf"(?<![A-Za-z0-9._-]){value}(?![A-Za-z0-9._-])"
+    elif anchor.namespace == "EQ":
+        pattern = rf"(?:公式|方程|式|tag)\D{{0,8}}{value}(?![\d.])"
+    elif anchor.namespace == "FIG":
+        pattern = rf"(?:附图|图)\s*{value}(?![\d.])"
+    elif anchor.namespace == "KP":
+        pattern = rf"(?:保护点|权利要求)\s*{value}(?![\d.])"
+    else:
+        pattern = rf"(?<![A-Za-z0-9.]){value}(?![A-Za-z0-9.])"
+    return re.compile(pattern, re.I)
+
+
+def _block_from_line(lines: Sequence[str], index: int, anchor: RevisionAnchor) -> str:
+    current = lines[index]
+    if anchor.namespace == "SECTION":
+        heading = re.match(r"^(\s*)(#{1,6})\s+", current)
+        if heading:
+            level = len(heading.group(2))
+            end = index + 1
+            while end < len(lines):
+                next_heading = re.match(r"^\s*(#{1,6})\s+", lines[end])
+                if next_heading and len(next_heading.group(1)) <= level:
+                    break
+                end += 1
+            return "\n".join(lines[index:end]).strip()
+    if current.lstrip().startswith("|"):
+        return current.strip()
+
+    start = index
+    if anchor.namespace == "EQ" and re.fullmatch(r"\s*\(\s*\d+(?:\.\d+)?\s*\)\s*", current):
+        if index > 0 and lines[index - 1].strip():
+            start = index - 1
+    end = index + 1
+    while end < len(lines):
+        candidate = lines[end]
+        if not candidate.strip() or re.match(r"^\s*#{1,6}\s+", candidate):
+            break
+        if re.match(
+            r"^\s*(?:[-+*]\s*)?(?:\*\*)?(?:S\d+|D\d+|(?:附图|图)\s*\d+|保护点\s*\d+)",
+            _normalise_for_search(candidate),
+            re.I,
+        ):
+            break
+        end += 1
+    return "\n".join(lines[start:end]).strip()
+
+
+def _find_anchor_blocks(text: str, anchor: RevisionAnchor) -> list[AnchorBlock]:
+    if anchor.namespace not in ANCHOR_NAMESPACES - {"MVP", "FILE"}:
+        return []
+    lines = text.splitlines()
+    normalised_lines = [_normalise_for_search(line) for line in lines]
+    strong = _strong_anchor_pattern(anchor)
+    indices = [index for index, line in enumerate(normalised_lines) if strong.search(line)]
+    matched_by = "strong"
+    if not indices:
+        fallback = _fallback_anchor_pattern(anchor)
+        indices = [index for index, line in enumerate(normalised_lines) if fallback.search(line)]
+        matched_by = "fallback"
+    return [
+        AnchorBlock(index + 1, _block_from_line(lines, index, anchor), matched_by)
+        for index in indices
+    ]
+
+
+def _resolve_relative_file(root: Path, value: str) -> Path | None:
+    parts = value.replace("\\", "/").split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return None
+    root_resolved = root.expanduser().resolve()
+    candidate = root_resolved.joinpath(*parts).resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _infer_baseline_md(
+    revision_md: Path,
+    revision_root: Path,
+    baseline_root: Path | None,
+) -> Path | None:
+    """Resolve the baseline Markdown by the revision file's relative path."""
+    if baseline_root is None:
+        return None
+    try:
+        relative = revision_md.expanduser().resolve().relative_to(
+            revision_root.expanduser().resolve()
+        )
+    except ValueError:
+        return None
+    candidate = _resolve_relative_file(baseline_root, relative.as_posix())
+    return candidate if candidate and candidate.is_file() else None
+
+
+def _unsupported_word_location(*values: str) -> bool:
+    return bool(WORD_PART_RE.search(" ".join(values)))
+
+
+def _add_invalid_anchor_items(
+    outcome: CheckOutcome,
+    *,
+    comment: str,
+    source: str,
+    errors: Sequence[dict[str, str]],
+) -> None:
+    for error in errors:
+        outcome.fail_items.append(
+            {
+                "comment": comment,
+                "source": source,
+                "anchor": error.get("anchor", ""),
+                "reason": "invalid_anchor",
+                "issue": error.get("issue", "非法机器锚点"),
+            }
+        )
+
+
+def _warn_fallback_anchor(
+    outcome: CheckOutcome,
+    *,
+    comment: str,
+    anchor: RevisionAnchor,
+    blocks: Sequence[AnchorBlock],
+    source: str,
+) -> None:
+    fallback_blocks = [block for block in blocks if block.matched_by == "fallback"]
+    if not fallback_blocks:
+        return
+    outcome.warn_items.append(
+        {
+            "comment": comment,
+            "anchor": anchor.label,
+            "source": source,
+            "reason": "fallback_anchor_match",
+            "lines": [block.line for block in fallback_blocks],
+            "issue": "锚点仅由宽松回退规则定位；须人工确认其确为代理意见所指对象",
+        }
+    )
+
+
+def check_reply_anchors_resolvable(
+    attorney_reply: Path | None,
+    revision_matrix: Path | None,
+    revision_md: Path | None,
+    revision_root: Path | None,
+    *,
+    baseline_md: Path | None = None,
+    baseline_root: Path | None = None,
+) -> CheckOutcome:
+    """C16: validate recorded revision anchors and object existence.
+
+    This check is deliberately structural. Resolving an anchor proves neither
+    that the edit is professionally sufficient nor that it answers counsel.
+    """
+    outcome = CheckOutcome("C16", "reply_anchors_resolvable")
+    if revision_matrix is None:
+        if attorney_reply is None and baseline_md is None and baseline_root is None:
+            outcome.info_items.append({"note": "未提供修订闭环参数，跳过修订锚点门禁"})
+        else:
+            outcome.fail_items.append(
+                {
+                    "reason": "missing_input",
+                    "issue": "已提供代理回复或基线，但缺少 --revision-matrix",
+                }
+            )
+        return outcome
+    required = {
+        "attorney_reply": attorney_reply,
+        "revision_md": revision_md,
+        "revision_root": revision_root,
+    }
+    missing_inputs = [name for name, value in required.items() if value is None]
+    if missing_inputs:
+        outcome.fail_items.append(
+            {
+                "reason": "missing_input",
+                "issue": "C16 缺少输入：" + ", ".join(missing_inputs),
+            }
+        )
+        return outcome
+    assert attorney_reply is not None and revision_md is not None and revision_root is not None
+    for label, path in (
+        ("attorney_reply", attorney_reply),
+        ("revision_matrix", revision_matrix),
+        ("revision_md", revision_md),
+    ):
+        if not path.is_file():
+            outcome.fail_items.append(
+                {"reason": "input_not_found", "input": label, "file": str(path)}
+            )
+    if outcome.fail_items:
+        return outcome
+
+    rows, matrix_errors = _parse_revision_matrix(revision_matrix)
+    replies, reply_errors = _parse_attorney_reply(attorney_reply)
+    for issue in matrix_errors:
+        outcome.fail_items.append(
+            {"reason": "revision_matrix_invalid", "file": revision_matrix.name, "issue": issue}
+        )
+    for issue in reply_errors:
+        outcome.fail_items.append(
+            {"reason": "attorney_reply_invalid", "file": attorney_reply.name, "issue": issue}
+        )
+    if not rows:
+        return outcome
+
+    duplicate_comments = {
+        row.comment for row in rows if sum(item.comment == row.comment for item in rows) > 1
+    }
+    for comment in sorted(duplicate_comments):
+        outcome.warn_items.append(
+            {"comment": comment, "reason": "duplicate_matrix_row", "issue": "修订矩阵编号重复，定位可能歧义"}
+        )
+    matrix_comments = {row.comment for row in rows}
+    for comment in sorted(set(replies) - matrix_comments):
+        outcome.fail_items.append(
+            {
+                "comment": comment,
+                "reason": "matrix_entry_missing",
+                "issue": "代理回复有批注块，但修订矩阵无对应记录",
+            }
+        )
+
+    revision_text = revision_md.read_text(encoding="utf-8")
+    effective_baseline_md = (
+        baseline_md
+        if baseline_md and baseline_md.is_file()
+        else _infer_baseline_md(revision_md, revision_root, baseline_root)
+    )
+    baseline_text = (
+        effective_baseline_md.read_text(encoding="utf-8")
+        if effective_baseline_md
+        else None
+    )
+    effective_baseline_root = baseline_root or (
+        effective_baseline_md.parent if effective_baseline_md else None
+    )
+
+    for row in rows:
+        matrix_anchors, matrix_anchor_errors = _parse_anchor_list(row.anchor_text)
+        _add_invalid_anchor_items(
+            outcome,
+            comment=row.comment,
+            source="revision_matrix",
+            errors=matrix_anchor_errors,
+        )
+        reply_fields = replies.get(row.comment)
+        if reply_fields is None:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "reply_entry_missing",
+                    "issue": "修订矩阵有记录，但代理回复无对应固定块",
+                }
+            )
+            reply_anchors: list[RevisionAnchor] = []
+            reply_status = ""
+        else:
+            reply_status = reply_fields.get("处理结果", "").strip()
+            reply_anchors, reply_anchor_errors = _parse_anchor_list(
+                reply_fields.get("机器锚点", "")
+            )
+            _add_invalid_anchor_items(
+                outcome,
+                comment=row.comment,
+                source="attorney_reply",
+                errors=reply_anchor_errors,
+            )
+            missing_in_matrix = sorted(
+                {anchor.label for anchor in reply_anchors}
+                - {anchor.label for anchor in matrix_anchors}
+            )
+            if missing_in_matrix:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "reply_matrix_anchor_mismatch",
+                        "anchors": missing_in_matrix,
+                        "issue": "代理回复声明的修改位置未全部登记到修订矩阵",
+                    }
+                )
+
+        exempt = _is_no_change_exemption(row.status, row.change)
+        implemented = row.status in IMPLEMENTED_REPLY_STATUSES and not exempt
+        unsupported = _unsupported_word_location(
+            row.location,
+            row.change,
+            reply_fields.get("修改位置", "") if reply_fields else "",
+        )
+        if row.status not in ALLOWED_REPLY_STATUSES:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "invalid_external_status",
+                    "status": row.status,
+                    "issue": "对外状态不在修订闭环允许值中",
+                }
+            )
+        expected_final_status = FINAL_STATUS_BY_REPLY_STATUS.get(row.status)
+        if row.final_status not in {"CLOSED", "PARTIAL", "OPEN"}:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "invalid_final_status",
+                    "status": row.final_status,
+                    "issue": "最终状态只允许 CLOSED/PARTIAL/OPEN",
+                }
+            )
+        elif expected_final_status and row.final_status != expected_final_status:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "final_status_mismatch",
+                    "external_status": row.status,
+                    "final_status": row.final_status,
+                    "expected": expected_final_status,
+                    "issue": "对外状态与最终闭环状态不一致",
+                }
+            )
+        if row.mvp_impact not in MVP_IMPACT_VALUES:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "invalid_mvp_impact",
+                    "value": row.mvp_impact,
+                    "issue": "是否影响 MVP/计算只允许 是/否/待判断",
+                }
+            )
+        elif row.mvp_impact == "是":
+            has_mvp_anchor = any(
+                (_delete_target(anchor) if anchor.is_delete else anchor).namespace == "MVP"
+                for anchor in matrix_anchors
+            )
+            if not has_mvp_anchor:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "mvp_anchor_missing",
+                        "issue": "MVP/计算影响为“是”时至少登记一个 MVP: 机器锚点",
+                    }
+                )
+            if "MVP" not in row.linked_checks and "计算" not in row.linked_checks:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "mvp_linked_check_missing",
+                        "issue": "MVP/计算影响为“是”时联动检查须包含 MVP/计算",
+                    }
+                )
+        if exempt and not _is_meaningful(row.change):
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "exemption_reason_missing",
+                    "issue": "豁免机器锚点时必须在修改说明中填写客观原因",
+                }
+            )
+        if implemented and not matrix_anchors:
+            if unsupported:
+                outcome.warn_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "unsupported_word_part",
+                        "location": row.location,
+                        "issue": "目标位于当前 Markdown 门禁不支持的 Word 部件，请人工复核",
+                    }
+                )
+            else:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "missing_machine_anchor",
+                        "issue": "已落实或部分落实的意见必须登记机器锚点",
+                    }
+                )
+        if reply_fields is not None:
+            reply_exempt = _is_no_change_exemption(
+                reply_status, reply_fields.get("具体处理", "")
+            )
+            if reply_status not in ALLOWED_REPLY_STATUSES:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "source": "attorney_reply",
+                        "reason": "invalid_external_status",
+                        "status": reply_status,
+                        "issue": "代理回复处理结果只允许四种落实状态",
+                    }
+                )
+            elif reply_status != row.status:
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "reply_matrix_status_mismatch",
+                        "reply_status": reply_status,
+                        "matrix_status": row.status,
+                        "issue": "代理回复处理结果与修订矩阵对外状态不一致",
+                    }
+                )
+            if (
+                reply_status in IMPLEMENTED_REPLY_STATUSES
+                and not reply_exempt
+                and not reply_anchors
+                and not matrix_anchors
+            ):
+                if not unsupported:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "reason": "reply_missing_machine_anchor",
+                            "issue": "正式代理回复声称已落实，但机器锚点为空",
+                        }
+                    )
+            elif reply_exempt and not _is_meaningful(reply_fields.get("具体处理", "")):
+                outcome.fail_items.append(
+                    {
+                        "comment": row.comment,
+                        "reason": "exemption_reason_missing",
+                        "source": "attorney_reply",
+                        "issue": "正式代理回复豁免锚点时必须说明原因",
+                    }
+                )
+
+        for anchor in matrix_anchors:
+            target = _delete_target(anchor) if anchor.is_delete else anchor
+            if target.namespace in {"MVP", "FILE"}:
+                revision_file = _resolve_relative_file(revision_root, target.value)
+                if revision_file is None:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "invalid_anchor",
+                            "issue": "文件锚点越出 revision root",
+                        }
+                    )
+                    continue
+                if anchor.is_delete:
+                    if effective_baseline_root is None:
+                        outcome.fail_items.append(
+                            {
+                                "comment": row.comment,
+                                "anchor": anchor.label,
+                                "reason": "delete_baseline_missing",
+                                "issue": "DELETE 文件锚点必须提供 baseline root",
+                            }
+                        )
+                        continue
+                    baseline_file = _resolve_relative_file(effective_baseline_root, target.value)
+                    if baseline_file is None or not baseline_file.is_file():
+                        outcome.fail_items.append(
+                            {
+                                "comment": row.comment,
+                                "anchor": anchor.label,
+                                "reason": "delete_target_missing_in_baseline",
+                                "issue": "DELETE 目标在基线目录中不存在",
+                            }
+                        )
+                    if revision_file.exists():
+                        outcome.fail_items.append(
+                            {
+                                "comment": row.comment,
+                                "anchor": anchor.label,
+                                "reason": "delete_target_still_exists",
+                                "issue": "DELETE 目标在修订目录中仍然存在",
+                            }
+                        )
+                elif not revision_file.is_file():
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "file_not_found",
+                            "file": str(revision_file),
+                            "issue": "MVP/FILE 锚点指定的修订文件不存在",
+                        }
+                    )
+                continue
+
+            if anchor.is_delete:
+                if baseline_text is None:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "delete_baseline_missing",
+                            "issue": "DELETE 正文锚点必须提供可读 baseline md",
+                        }
+                    )
+                    continue
+                baseline_blocks = _find_anchor_blocks(baseline_text, target)
+                revision_blocks = _find_anchor_blocks(revision_text, target)
+                _warn_fallback_anchor(
+                    outcome,
+                    comment=row.comment,
+                    anchor=anchor,
+                    blocks=baseline_blocks,
+                    source="baseline",
+                )
+                _warn_fallback_anchor(
+                    outcome,
+                    comment=row.comment,
+                    anchor=anchor,
+                    blocks=revision_blocks,
+                    source="revision",
+                )
+                if not baseline_blocks:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "delete_target_missing_in_baseline",
+                            "issue": "DELETE 目标在基线稿中不存在",
+                        }
+                    )
+                elif len(baseline_blocks) > 1:
+                    outcome.warn_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "ambiguous_anchor",
+                            "matches": len(baseline_blocks),
+                            "issue": "DELETE 目标在基线稿中匹配多个对象，请人工确认",
+                        }
+                    )
+                if revision_blocks:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "delete_target_still_exists",
+                            "matches": len(revision_blocks),
+                            "issue": "DELETE 目标在修订稿中仍然存在",
+                        }
+                    )
+                continue
+
+            blocks = _find_anchor_blocks(revision_text, target)
+            _warn_fallback_anchor(
+                outcome,
+                comment=row.comment,
+                anchor=anchor,
+                blocks=blocks,
+                source="revision",
+            )
+            if not blocks:
+                if unsupported:
+                    outcome.warn_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "unsupported_word_part",
+                            "issue": "目标可能位于当前工具不支持的 Word 部件，请人工复核",
+                        }
+                    )
+                elif UNCERTAIN_MAPPING_RE.search(f"{row.location} {row.change}"):
+                    outcome.warn_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "mapping_uncertain",
+                            "issue": "章节或编号发生重排，无法稳定定位，请人工复核",
+                        }
+                    )
+                else:
+                    outcome.fail_items.append(
+                        {
+                            "comment": row.comment,
+                            "anchor": anchor.label,
+                            "reason": "anchor_not_found",
+                            "issue": "普通正文锚点在修订稿中不存在",
+                        }
+                    )
+            elif len(blocks) > 1:
+                outcome.warn_items.append(
+                    {
+                        "comment": row.comment,
+                        "anchor": anchor.label,
+                        "reason": "ambiguous_anchor",
+                        "matches": len(blocks),
+                        "lines": [block.line for block in blocks],
+                        "issue": "锚点定位到多个对象，请人工确认",
+                    }
+                )
+
+    if not outcome.fail_items and not outcome.warn_items:
+        outcome.info_items.append(
+            {
+                "rows": len(rows),
+                "note": "机器锚点均可解析；本检查不判断修改是否充分或是否语义解决代理意见",
+            }
+        )
+    return outcome
+
+
+def normalise_revision_text(text: str) -> str:
+    """Normalise presentation-only variation while retaining technical text."""
+    text = ZERO_WIDTH_RE.sub("", unicodedata.normalize("NFKC", text))
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text, flags=re.S)
+    text = re.sub(r"__(.+?)__", r"\1", text, flags=re.S)
+    text = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"\1", text)
+    text = re.sub(r"(?<![\w_])_([^_\n]+?)_(?![\w_])", r"\1", text)
+    punctuation = str.maketrans(
+        {
+            "，": ",", "。": ".", "：": ":", "；": ";", "！": "!",
+            "？": "?", "、": ".", "“": '"', "”": '"', "‘": "'", "’": "'",
+        }
+    )
+    normalised_lines: list[str] = []
+    for raw in text.split("\n"):
+        line = raw.translate(punctuation)
+        line = re.sub(r"^\s*#{1,6}\s*", "", line)
+        line = re.sub(r"^\s*[-+]\s+", "", line)
+        line = re.sub(r"^\s*\(\s*(\d+)\s*\)\s*[.]?\s*", r"\1. ", line)
+        line = re.sub(r"^\s*(\d+)\s*[.)]\s*", r"\1. ", line)
+        normalised_lines.append(line.strip())
+    text = "".join(line for line in normalised_lines if line)
+    text = re.sub(r"\s+", "", text)
+    return text.strip()
+
+
+def _text_similarity(before: str, after: str) -> float:
+    return difflib.SequenceMatcher(None, before, after, autojunk=False).ratio()
+
+
+def _compare_normalised_text(
+    anchor: str,
+    before: str,
+    after: str,
+    threshold: float,
+) -> DiffEvidence:
+    normal_before = normalise_revision_text(before)
+    normal_after = normalise_revision_text(after)
+    if normal_before == normal_after:
+        return DiffEvidence(anchor, "same", 1.0)
+    similarity = _text_similarity(normal_before, normal_after)
+    if similarity >= threshold:
+        return DiffEvidence(anchor, "near", similarity)
+    return DiffEvidence(anchor, "changed", similarity)
+
+
+def _read_prose_file(path: Path) -> str | None:
+    if path.suffix.lower() not in PROSE_TEXT_SUFFIXES:
+        return None
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return None
+
+
+def _compare_file_anchor(
+    anchor: RevisionAnchor,
+    revision_root: Path,
+    baseline_root: Path | None,
+    threshold: float,
+) -> DiffEvidence:
+    target = _delete_target(anchor) if anchor.is_delete else anchor
+    revision_file = _resolve_relative_file(revision_root, target.value)
+    baseline_file = _resolve_relative_file(baseline_root, target.value) if baseline_root else None
+    if revision_file is None or (baseline_root is not None and baseline_file is None):
+        return DiffEvidence(anchor.label, "uncertain", detail="文件锚点越出根目录")
+    baseline_exists = bool(baseline_file and baseline_file.is_file())
+    revision_exists = revision_file.is_file()
+    if anchor.is_delete:
+        if baseline_exists and not revision_exists:
+            return DiffEvidence(anchor.label, "changed", detail="基线存在且修订版已删除")
+        return DiffEvidence(anchor.label, "uncertain", detail="DELETE 存在状态不满足")
+    if not baseline_exists and revision_exists:
+        return DiffEvidence(anchor.label, "changed", detail="修订版新增文件")
+    if baseline_exists and not revision_exists:
+        return DiffEvidence(anchor.label, "uncertain", detail="非 DELETE 文件锚点在修订版缺失")
+    if not baseline_exists and not revision_exists:
+        return DiffEvidence(anchor.label, "uncertain", detail="基线与修订版均无该文件")
+    assert baseline_file is not None
+    before_hash = hashlib.sha256(baseline_file.read_bytes()).hexdigest()
+    after_hash = hashlib.sha256(revision_file.read_bytes()).hexdigest()
+    if before_hash == after_hash:
+        return DiffEvidence(anchor.label, "same", 1.0, "file hash unchanged")
+    before_text = _read_prose_file(baseline_file)
+    after_text = _read_prose_file(revision_file)
+    if before_text is not None and after_text is not None:
+        return _compare_normalised_text(anchor.label, before_text, after_text, threshold)
+    return DiffEvidence(anchor.label, "changed", detail="file hash changed")
+
+
+def check_claimed_changes_have_diff(
+    revision_matrix: Path | None,
+    revision_md: Path | None,
+    revision_root: Path | None,
+    *,
+    baseline_md: Path | None = None,
+    baseline_root: Path | None = None,
+    similarity_threshold: float = 0.98,
+    revision_requested: bool = False,
+) -> CheckOutcome:
+    """C17: detect structural change for implemented revision-matrix rows.
+
+    PASS means only that a verifiable change exists. It does not establish that
+    the change semantically resolves the attorney comment.
+    """
+    outcome = CheckOutcome("C17", "claimed_changes_have_diff")
+    if revision_matrix is None:
+        if revision_requested:
+            outcome.fail_items.append(
+                {
+                    "reason": "missing_input",
+                    "issue": "已提供修订闭环参数，但缺少 --revision-matrix",
+                }
+            )
+        else:
+            outcome.info_items.append({"note": "未提供修订闭环参数，跳过修订 diff 门禁"})
+        return outcome
+    if revision_md is None or revision_root is None:
+        outcome.warn_items.append(
+            {"reason": "revision_input_missing", "issue": "缺少 revision md/root，C17 无法定位修订内容"}
+        )
+        return outcome
+    if not 0.0 <= similarity_threshold <= 1.0:
+        outcome.warn_items.append(
+            {"reason": "invalid_similarity_threshold", "value": similarity_threshold}
+        )
+        return outcome
+    if baseline_md is None and baseline_root is None:
+        outcome.warn_items.append(
+            {
+                "reason": "baseline_missing",
+                "issue": "未提供 baseline md/root，C17 跳过实质 diff 判定",
+            }
+        )
+        return outcome
+    if not revision_matrix.is_file() or not revision_md.is_file():
+        outcome.warn_items.append(
+            {"reason": "revision_input_missing", "issue": "修订矩阵或修订 Markdown 不存在"}
+        )
+        return outcome
+
+    rows, errors = _parse_revision_matrix(revision_matrix)
+    if errors:
+        outcome.warn_items.extend(
+            {"reason": "revision_matrix_invalid", "issue": error} for error in errors
+        )
+    if not rows:
+        return outcome
+    revision_text = revision_md.read_text(encoding="utf-8")
+    effective_baseline_md = (
+        baseline_md
+        if baseline_md and baseline_md.is_file()
+        else _infer_baseline_md(revision_md, revision_root, baseline_root)
+    )
+    baseline_text = (
+        effective_baseline_md.read_text(encoding="utf-8")
+        if effective_baseline_md
+        else None
+    )
+    effective_baseline_root = baseline_root or (
+        effective_baseline_md.parent if effective_baseline_md else None
+    )
+
+    for row in rows:
+        if row.status not in IMPLEMENTED_REPLY_STATUSES or _is_no_change_exemption(
+            row.status, row.change
+        ):
+            continue
+        anchors, anchor_errors = _parse_anchor_list(row.anchor_text)
+        if anchor_errors or not anchors:
+            outcome.warn_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "no_resolvable_anchor",
+                    "issue": "C16 应先解决机器锚点问题，C17 不作 diff 结论",
+                }
+            )
+            continue
+        evidence: list[DiffEvidence] = []
+        for anchor in anchors:
+            target = _delete_target(anchor) if anchor.is_delete else anchor
+            if target.namespace in {"MVP", "FILE"}:
+                evidence.append(
+                    _compare_file_anchor(
+                        anchor,
+                        revision_root,
+                        effective_baseline_root,
+                        similarity_threshold,
+                    )
+                )
+                continue
+            if baseline_text is None:
+                evidence.append(
+                    DiffEvidence(anchor.label, "uncertain", detail="缺少 baseline md")
+                )
+                continue
+            baseline_blocks = _find_anchor_blocks(baseline_text, target)
+            revision_blocks = _find_anchor_blocks(revision_text, target)
+            if any(
+                block.matched_by == "fallback"
+                for block in [*baseline_blocks, *revision_blocks]
+            ):
+                evidence.append(
+                    DiffEvidence(
+                        anchor.label,
+                        "uncertain",
+                        detail="锚点至少一侧仅由 fallback 规则定位",
+                    )
+                )
+                continue
+            if anchor.is_delete:
+                if len(baseline_blocks) == 1 and not revision_blocks:
+                    evidence.append(
+                        DiffEvidence(anchor.label, "changed", detail="基线存在且修订稿已删除")
+                    )
+                else:
+                    evidence.append(
+                        DiffEvidence(anchor.label, "uncertain", detail="DELETE 映射不唯一或删除未成立")
+                    )
+                continue
+            if not baseline_blocks and len(revision_blocks) == 1:
+                if UNCERTAIN_MAPPING_RE.search(f"{row.location} {row.change}"):
+                    evidence.append(
+                        DiffEvidence(anchor.label, "uncertain", detail="编号重排后基线无同名锚点")
+                    )
+                else:
+                    evidence.append(
+                        DiffEvidence(anchor.label, "changed", detail="修订稿新增结构化锚点")
+                    )
+            elif len(baseline_blocks) == 1 and len(revision_blocks) == 1:
+                evidence.append(
+                    _compare_normalised_text(
+                        anchor.label,
+                        baseline_blocks[0].text,
+                        revision_blocks[0].text,
+                        similarity_threshold,
+                    )
+                )
+            else:
+                evidence.append(
+                    DiffEvidence(
+                        anchor.label,
+                        "uncertain",
+                        detail=(
+                            f"baseline matches={len(baseline_blocks)}, "
+                            f"revision matches={len(revision_blocks)}"
+                        ),
+                    )
+                )
+
+        changed = [item for item in evidence if item.category == "changed"]
+        uncertain = [item for item in evidence if item.category == "uncertain"]
+        near = [item for item in evidence if item.category == "near"]
+        same = [item for item in evidence if item.category == "same"]
+        if same:
+            item: dict[str, Any] = {
+                "comment": row.comment,
+                "reason": "no_detectable_diff",
+                "similarity": 1.0,
+                "anchors": [entry.anchor for entry in same],
+                "issue": "至少一个声称修改的锚点在规范化后完全相同",
+            }
+            if changed:
+                item["changed_anchors"] = [entry.anchor for entry in changed]
+            if near:
+                item["near_anchors"] = [entry.anchor for entry in near]
+            if uncertain:
+                item["uncertain_anchors"] = [entry.anchor for entry in uncertain]
+            outcome.fail_items.append(item)
+        elif uncertain:
+            item = {
+                "comment": row.comment,
+                "reason": "mapping_uncertain",
+                "anchors": [entry.anchor for entry in uncertain],
+                "details": [entry.detail for entry in uncertain],
+                "issue": "无法稳定识别基线与修订区块的对应关系，请人工复核",
+            }
+            if changed:
+                item["changed_anchors"] = [entry.anchor for entry in changed]
+            outcome.warn_items.append(item)
+        elif near:
+            similarity = max(item.similarity or 0.0 for item in near)
+            item = {
+                "comment": row.comment,
+                "reason": "high_similarity",
+                "anchors": [entry.anchor for entry in near],
+                "similarity": round(similarity, 6),
+                "threshold": similarity_threshold,
+                "issue": "至少一个对应区块仅发生极小变化，疑似形式性调整，请人工确认",
+            }
+            if changed:
+                item["changed_anchors"] = [entry.anchor for entry in changed]
+            outcome.warn_items.append(item)
+        elif changed:
+            outcome.info_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "change_detected",
+                    "anchors": [item.anchor for item in changed],
+                    "note": "仅确认检测到结构变化，不表示语义上已解决代理意见",
+                }
+            )
+        else:
+            outcome.fail_items.append(
+                {
+                    "comment": row.comment,
+                    "reason": "no_detectable_diff",
+                    "similarity": 1.0,
+                    "anchors": [item.anchor for item in evidence],
+                    "issue": "声称已修改，但规范化后的对应内容或文件完全相同",
                 }
             )
     return outcome
@@ -1106,6 +2391,48 @@ def run_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any], list[str]]:
         add(check_attorney_reply(args.comments_json, args.attorney_reply))
     if not skip("C15", "impl_params_in_claims"):
         add(check_impl_params_in_claims(md_path))
+    revision_requested = any(
+        (
+            args.attorney_reply,
+            args.revision_matrix,
+            args.revision_root,
+            args.baseline_md,
+            args.baseline_root,
+        )
+    )
+    c16_outcome: CheckOutcome | None = None
+    if not skip("C16", "reply_anchors_resolvable"):
+        c16_outcome = check_reply_anchors_resolvable(
+            args.attorney_reply,
+            args.revision_matrix,
+            md_path,
+            args.revision_root or md_path.parent,
+            baseline_md=args.baseline_md,
+            baseline_root=args.baseline_root,
+        )
+        add(c16_outcome)
+    if not skip("C17", "claimed_changes_have_diff"):
+        if c16_outcome is not None and c16_outcome.fail_items:
+            c17_outcome = CheckOutcome("C17", "claimed_changes_have_diff")
+            c17_outcome.warn_items.append(
+                {
+                    "reason": "not_evaluated",
+                    "issue": "C16 未通过，C17 未作 diff 判定，不能记为 PASS",
+                }
+            )
+            add(c17_outcome)
+        else:
+            add(
+                check_claimed_changes_have_diff(
+                    args.revision_matrix,
+                    md_path,
+                    args.revision_root or md_path.parent,
+                    baseline_md=args.baseline_md,
+                    baseline_root=args.baseline_root,
+                    similarity_threshold=args.revision_similarity_threshold,
+                    revision_requested=revision_requested,
+                )
+            )
 
     status = _max_status(outcomes)
     fails = _json_entries(outcomes, "fail_items")
@@ -1162,7 +2489,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="技术证据合同 YAML（缺省时在案件目录自动发现 *技术证据合同*.yaml）",
     )
     parser.add_argument("--comments-json", type=Path, help="docx_comment_extract 输出的批注 JSON（C14 用）")
-    parser.add_argument("--attorney-reply", type=Path, help="代理意见逐条回复 md（C14 用）")
+    parser.add_argument("--attorney-reply", type=Path, help="代理意见逐条回复 md（C14/C16 用）")
+    parser.add_argument("--revision-matrix", type=Path, help="批注处置矩阵 Markdown（C16/C17）")
+    parser.add_argument("--revision-root", type=Path, help="修订版 MVP/FILE 相对路径根目录；默认 --md 所在目录")
+    parser.add_argument("--baseline-md", type=Path, help="修订前基线 Markdown（C16 DELETE / C17）")
+    parser.add_argument("--baseline-root", type=Path, help="基线版 MVP/FILE 相对路径根目录")
+    parser.add_argument(
+        "--revision-similarity-threshold",
+        "--similarity-threshold",
+        dest="revision_similarity_threshold",
+        type=float,
+        default=0.98,
+        help="C17 高相似度 WARN 阈值，默认 0.98",
+    )
     parser.add_argument("--skip", action="append", choices=CHECK_IDS, default=[])
     parser.add_argument("--no-record", action="store_true", help="不写交付检查记录")
     return parser

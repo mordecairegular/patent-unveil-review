@@ -40,7 +40,7 @@ git clone <本仓库 URL> .claude/skills/patent-unveil-review
 
 或使用本地路径复制到 `.claude/skills/patent-unveil-review`。
 
-运行时环境通常会设置 **`CLAUDE_SKILL_DIR`** 指向该技能目录；`SKILL.md` 中的 `${CLAUDE_SKILL_DIR}/prompts/...` 即解析到此路径。
+把包含 `SKILL.md` 的目录视为 **`SKILL_ROOT`**。不同宿主使用各自方式定位该目录；核心 prompt 和工具命令不依赖某个宿主的专用环境变量。宿主入口示例见 `adapters/claude/` 与 `adapters/codex/`。
 
 ## Cursor
 
@@ -77,7 +77,7 @@ git clone <本仓库 URL> "$env:USERPROFILE\.cursor\skills\patent-unveil-review"
 
 ### 与「仅打开文件夹」等价关系
 
-若未使用上述 `skills/` 布局，也可**直接用 Cursor 打开本仓库根目录**作为工作区；此时将 **`CLAUDE_SKILL_DIR`** 理解为「包含 `SKILL.md` 的目录」，prompts 路径为 `./prompts/*.md`，与 `SKILL.md` 示例命令中的 **`${CLAUDE_SKILL_DIR}`** 同义。
+若未使用上述 `skills/` 布局，也可直接打开本仓库根目录作为工作区；此时仓库根即 `SKILL_ROOT`，prompt 路径为 `./prompts/*.md`。
 
 为与 Claude Code 迁移一致，Cursor 也会扫描 **`~/.claude/skills/`**、项目内 **`.claude/skills/`** 等路径；详见 Cursor 官方文档与当前版本设置项。
 

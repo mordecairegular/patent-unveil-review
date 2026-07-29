@@ -1,5 +1,14 @@
 # 联网检索查新（Step 5）
 
+## 局部执行契约
+
+- **Purpose**：以可复核证据评价各候选方向的现有技术风险和当前评价完成度，并提取可用区别特征。
+- **Inputs**：明确技术主题/候选方向、检索词块、用户材料与案件目录；探针级或案件级范围标记。
+- **Outputs**：证据包、最小对比表、逐方向 `risk_grade` 与 `evaluation_status`、可用区别特征和回写结论。
+- **Must**：风险与证据完成度分维度记录；实际打开后才升级来源状态；关键主对比核读独立权利要求；渠道受阻记环境状态。
+- **Must not**：把证据不足、检索受阻或待核验当作风险等级；把检索失败/零命中写成不存在现有技术；绕过验证码、访问挑战或访问控制；编造来源或结论。
+- **Completion criteria**：每个方向均有合法二维评价、证据缺口、来源状态和后续动作；案件级证据包与确认点 3 记录完整，或明确暂停原因。
+
 ## 必做时机
 
 生成交底书全文**之前或生成过程中**必须执行；检索结论写入第一章 **1.1 现有技术** 及与本案的**区别论述**。
@@ -10,7 +19,7 @@
 
 | 项 | 探针级（T0.5，方向分诊） | 案件级（Step 5，主题定案） |
 |---|---|---|
-| 目的 | 给候选方向 A/B/C/D 探针级初判 | 形成正式查新结论并回写 |
+| 目的 | 给候选方向 `risk_grade` + `evaluation_status` 探针级初判 | 形成正式二维查新结论并回写 |
 | 检索量 | 每方向 2–3 组词块，EPUB / `gp_xhr_search.py` 首页级 | 多词块全量 + 组合式直击 + 高相关全文精读 |
 | 复核 | 影响初判的高相关条目至少 1 条稳定页复核 | 全部高相关文献复核 + 阳性对照 ≥3 门禁 |
 | 证据包 | 查新探针记录（含逐方向溯源） | `prior_art_dossier` 全套五件 |
@@ -26,7 +35,7 @@
 - 查新结论仅基于本轮可公开检索到的专利、论文和其它公开文献；不得表述为“绝对没有相同现有技术”。
 - 注意专利公开的天然盲区：很多申请自申请日或优先权日起满 18 个月左右才公开，最近未公开申请无法通过公开渠道检索。
 - 本步骤输出的是研发早期/交底书撰写前的检索分析，不替代专利代理师或律师的新颖性、创造性、侵权、FTO 或稳定性正式法律意见。
-- 不得编造命中文献、公开 URL、申请人、摘要、权利要求内容或检索结论；检索不到就是检索不到，标为 D 或待补检。
+- 不得编造命中文献、公开 URL、申请人、摘要、权利要求内容或检索结论；证据不足或检索受阻时，输出 `risk_grade: null` 并用 `evaluation_status` 说明原因。
 
 ## 证据模型（P0，先于结论）
 
@@ -79,7 +88,7 @@
 - `http://epub.cnipa.gov.cn/patent/{公开号}`、二维码 title、搜索会话 URL 等只能写入 `source_hint_url` / `cnipa_qr_or_hint_url`，**不得**写入 `stable_url`、`link` 或交底书 1.1 的公开源 URL。
 - 壹专利 / 高数图的学校远程访问 URL、搜索会话 URL、详情面板 URL 和截图编号只能写入案件证据包或 `source_hint_url`，**不得**写入 `stable_url`、`link` 或交底书 1.1 的公开源 URL。
 - `stable_url` / `link` 只能来自本轮实际打开并核验过的页面。
-- 高相关文献若只有 `cnipa_result_page_parsed`、`commercial_db_discovered`、`commercial_db_content_checked`、`unverified`、`failed` 或 `third_party_not_indexed` 状态，必须进入「未核验清单」；若其影响 A/B/C 结论，结论最高只能为 D 或 partial-D，需公开源或人工/CNIPA PSS 复核。
+- 高相关文献若只有 `cnipa_result_page_parsed`、`commercial_db_discovered`、`commercial_db_content_checked`、`unverified`、`failed` 或 `third_party_not_indexed` 状态，必须进入「未核验清单」；若其影响 A/B/C 结论，则输出 `risk_grade: null`、`evaluation_status: pending_verification`，待公开源或人工/CNIPA PSS 复核。
 
 ### 案件目录查新证据包（必做）
 
@@ -98,17 +107,17 @@ unverified_sources.md       # 未核验、未收录、失败、需人工复核�
 可用脚本辅助生成/更新证据包：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录}" --hits "{EPUB_HITS_JSON文件或记录}" --links "{PATENT_LINKS_JSON文件或记录}" --query "检索词1,检索词2" --note "本轮查新说明"
+python <SKILL_ROOT>/tools/prior_art_dossier.py --case-dir "{案件目录}" --hits "{EPUB_HITS_JSON文件或记录}" --links "{PATENT_LINKS_JSON文件或记录}" --query "检索词1,检索词2" --note "本轮查新说明"
 ```
 
-脚本只做结构化留档和来源状态整理，不替代 Agent 对相同点、区别点、阳性对照相关性和 A/B/C/D 的实质判断；生成后仍须补写 `same_points`、`distinguishing_points`、`usable_distinguishing_features` 等分析字段。
+脚本只做结构化留档和来源状态整理，不替代 Agent 对相同点、区别点、阳性对照相关性、`risk_grade` 与 `evaluation_status` 的实质判断；生成后仍须补写 `same_points`、`distinguishing_points`、`usable_distinguishing_features` 等分析字段。
 
 ## 检索渠道（官方优先，多源复核）
 
 ### A. 中国专利公布公告（**优先**，官方站点）
 
 1. **站点**：[国家知识产权局 中国专利公布公告](http://epub.cnipa.gov.cn/)（**仅** `epub.cnipa.gov.cn`）。
-2. **工具**（本仓库 `tools/`）：**`cnipa_epub_search.py`** —— **一步**完成公布站检索与结果解析（Playwright 过站点 WAF）；结果页 HTML **仅在内存中处理，不落盘**。成功时终端含 **`EPUB_NOTE:`**（ASCII，如 `html_bytes=… disk=0`）与 **`EPUB_HITS_JSON:`** 一行（JSON 数组：标题、公开号、`cnipa_qr_or_hint_url`、`google_patents_url`、`verification_status`、**`abstract`** 等）。
+2. **工具**（本仓库 `tools/`）：**`cnipa_epub_search.py`** ——使用浏览器自动化访问公开检索页面并一步完成检索与结果解析；遇到验证码、访问挑战、频率限制或网站禁止自动访问时，**停止自动访问并记录环境状态，不尝试绕过访问控制**。结果页 HTML **仅在内存中处理，不落盘**。成功时终端含 **`EPUB_NOTE:`**（ASCII，如 `html_bytes=… disk=0`）与 **`EPUB_HITS_JSON:`** 一行（JSON 数组：标题、公开号、`cnipa_qr_or_hint_url`、`google_patents_url`、`verification_status`、**`abstract`** 等）。
 3. **国知局检索词（生成阶段必做，须在拼 Bash 之前完成）**
 
    - **拆分责任在 Agent**：在**生成/构造命令阶段**，从本案技术方案、专利点或用户主题中归纳 **2～8 个与方案相关度高的检索单位**，**仅用 ASCII 空格分隔**，再写入 `cnipa_epub_search.py` 的参数。每一单位宜为 **有检索意义的语义块**，例如：**专业术语**、**名词短语**、**名动组合（如「批量调度」「异构调度」）**、**业内固定搭配**；**不要**拆成过碎的单字、泛义双字（如单独 `检索`、`增强`、`系统`、`方法` 等泛词），也**不要**把无关联词硬凑成一串。
@@ -128,18 +137,18 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 
    ```bash
    # 环境不确定时（新机器/云沙箱/上次 EPUB 失败）先做渠道预检，结果记入 query_log.md
-   python3 ${CLAUDE_SKILL_DIR}/tools/channel_preflight.py
+   python <SKILL_ROOT>/tools/channel_preflight.py
    pip install -r tools/requirements-cnipa.txt
    python -m playwright install chromium
    # Agent：对上一节每个检索单位各执行一次（示例仅展示首轮）
-   python3 ${CLAUDE_SKILL_DIR}/tools/cnipa_epub_search.py 词甲
+   python <SKILL_ROOT>/tools/cnipa_epub_search.py 词甲
    ```
 
    - **合并责任在 Agent**：每次调用解析 **stdout** 上**唯一一行** **`EPUB_HITS_JSON:`** 后的 JSON 数组；在推理中按 **`pub_number`** 为主键去重合并（无则 `cnipa_qr_or_hint_url`，再否则可用标题前缀），得到**一份**总表后先进入 `prior_art_dossier`，再做稳定来源复核。
    - **`cnipa_epub_search.py`** 若人工单次传入多词，会按空白拆段、进程内**一段一查**并去重（**stderr** 可出现 **`EPUB_MERGE:`**）；与 Agent **分多次调用**策略无关。
    - 成功时 **stdout 仅一行** **`EPUB_HITS_JSON:`** + JSON 数组（UTF-8，含中文 `abstract`）；**`EPUB_MERGE:`** / **`EPUB_NOTE:`** / **`EPUB_HINT:`** 等在 **stderr** 且为 **ASCII**（减轻 PowerShell 把中文 stderr 当成错误流）。解析命中时请以 **stdout 该行 JSON 为准**，勿因 stderr 或终端编码误判「未命中」而不必要地降级 WebSearch。Windows 乱码与 PowerShell 注意见 **`INSTALL.md`**（`chcp 65001` / `PYTHONUTF8=1`、勿滥用 `2>&1`）。
    - 将 JSON 中的公开号、标题、摘要和 `cnipa_qr_or_hint_url` 写入查新证据包；**不得**把 `cnipa_qr_or_hint_url` 当作已核验公开源 URL 写入 1.1。后续必须用 Google Patents / Espacenet / WIPO / CNIPA PSS 或人工详情页打开结果进行稳定复核。
-   - **补检/换源条件**（满足任一则继续执行 A2/B/C/D 渠道并在 `query_log.md` 记录）：命令非 0 退出、超时、无 Playwright、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。换源时优先 **`gp_xhr_search.py`**（§A2）；渠道失败作为**环境状态**记录（如「EPUB 在当前环境阻断」），**不得**写成「检索无结果」。
+   - **补检/换源条件**（满足任一则继续执行后续补充渠道并在 `query_log.md` 记录）：命令非 0 退出、超时、无 Playwright、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。换源时优先 **`gp_xhr_search.py`**（§A2）；渠道失败作为**环境状态**记录（如「EPUB 在当前环境阻断」），**不得**写成「检索无结果」。
 
 5. **`abstract` 字段（国知局条目，规定必用）**
 
@@ -157,7 +166,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 CNIPA EPUB 公布站结果**仅有首页约 10 条/词且无翻页**；候选池探针、覆盖度补强或 EPUB 在当前环境不可用时，用本仓库 **`tools/gp_xhr_search.py`** 做 Google Patents 关键词检索（按相关度排序、覆盖中英文与授权文本、含申请人与日期字段）：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 2
+python <SKILL_ROOT>/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 2
 ```
 
 - **stdout 仅一行 `GP_HITS_JSON:`**，字段与 `EPUB_HITS_JSON` 对齐；可与 EPUB 命中按 `pub_number` 去重合并，并直接作为 `patent_link_verify.py` 的输入复核。
@@ -167,12 +176,12 @@ python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 
 
 ### B. Google Patents / Espacenet / WIPO（高相关文献必做复核）
 
-对所有高相关专利、阳性对照和会影响 A/B/C/D 判断的条目，必须尝试至少一个稳定公开来源复核：
+对所有高相关专利、阳性对照和会影响 `risk_grade` / `evaluation_status` 判断的条目，必须尝试至少一个稳定公开来源复核：
 
 1. **Google Patents URL 复核**：优先运行：
 
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/tools/patent_link_verify.py --input "{EPUB_HITS_JSON或文件路径}"
+   python <SKILL_ROOT>/tools/patent_link_verify.py --input "{EPUB_HITS_JSON或文件路径}"
    ```
 
    输出 **`PATENT_LINKS_JSON:`**。其中 `verification_status="third_party_verified"` 的条目可把 `link`/`stable_url` 写入查新笔记、证据包或交接说明；正式 1.1 正文优先只写公开文献号、题名和技术对比。`third_party_not_indexed`、`failed` 等不得写为已核验 URL。
@@ -196,7 +205,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 
 
 当以下情况出现时，须建议或执行 CNIPA 专利检索及分析系统（PSS）复核；如遇登录、验证码、滑块、WAF，不得绕过，标记 `needs_human_auth`（**操作待办标记**，不是 `verification_status` 取值，不写入来源状态字段）并给出待复核检索式：
 
-- 关键 CNIPA EPUB 命中无法被第三方稳定来源复核，但会影响 A/B/C 结论。
+- 关键 CNIPA EPUB 命中无法被第三方稳定来源复核，但会影响风险等级或评价状态。
 - 多来源标题、摘要、申请人或公开日冲突。
 - 用户要求更高标准的正式查新支撑。
 - 最终要给 PASS 且核心区别特征高度依赖某几篇近似专利。
@@ -289,7 +298,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/gp_xhr_search.py 词甲 词乙 词丙 --pages 
 - **必须核读其独立权利要求原文**，据此确定"相同点 / 区别点 / 可用区别特征"，且这些点须能对应到独权的**技术特征**而非摘要措辞。
 - 影像型/扫描 PDF 无文本层时，**渲染为页图做视觉核读**（记 `official_claims_transcribed_from_page_images`，保留页图路径与转写责任），或在 Google Patents / Espacenet 打开其权利要求文本核读（`third_party_verified`）。
 - 证据字段新增 `primary_reference`（是否最接近现有技术）与 `claims_read`（是否已核读独权原文）；最小对比表中 `primary_reference=yes` 的行必须 `claims_read=yes`。
-- **门禁**：最接近现有技术 `claims_read=no` 时，本轮查新最高 **D/partial-D**，不得据摘要断言区别特征、不得进入 PASS 轨道。
+- **门禁**：最接近现有技术 `claims_read=no` 时，本轮输出 `risk_grade: null`、`evaluation_status: pending_verification`，不得据摘要断言区别特征、不得进入 PASS 轨道。
 
 ## 分析要求
 
@@ -335,27 +344,53 @@ claims_read              # yes/no：是否已核读独立权利要求原文（pr
 verification_time
 ```
 
-若无法找到 3 条高相关且稳定复核的阳性对照，或阳性对照均未完成稳定来源复核，本轮查新**最高只能给 D**；不得给 A/B。若因领域非常新导致公开文献极少，应在 D 结论中说明检索范围、失败来源和下一步人工/代理人复核建议。
+若无法找到 3 条高相关且稳定复核的阳性对照，则本轮不得给 A/B：文献数量/覆盖不足时输出 `risk_grade: null`、`evaluation_status: insufficient_evidence`；已有候选但稳定来源或独立权利要求待核时输出 `risk_grade: null`、`evaluation_status: pending_verification`。若因领域非常新导致公开文献极少，应说明检索范围、失败来源和下一步人工/代理人复核建议，不得为凑数加入低相关结果。
 
-### A/B/C/D 查新决策分级（必做）
+### 风险等级 + 评价状态（二维输出，必做）
 
-在检索总结前给出本案或每个候选方向的等级：
+检索总结前，**对本案或每个候选方向分别**输出以下机器字段；风险大小与评价完成度不得混在同一枚举中：
 
-| 等级 | 含义 | 后续动作 |
-|------|------|----------|
-| A | 未发现相同或实质相同公开方案，区别特征和技术效果初步成立 | 可进入 Step 7；仍须写明检索范围和公开检索局限 |
-| B | 存在相似公开方案，但本案可用区别特征清楚，技术效果可强化 | 可进入 Step 7，但第一章、第二章、第四章和第五章须围绕区别特征收紧 |
-| C | 高度相似，或主要区别特征弱/不可实施/技术效果不足 | 不应按原方向直接撰写；须改写、缩小为真实区别点或放弃主方向 |
-| D | 检索不足、来源不可核验、结果过少/过宽、关键数据库无法访问或判断证据不足 | 不得给出“可授权”式结论；须补检、换检索式或交由代理人/人工复核 |
+```yaml
+direction_id: P03
+risk_grade: A  # A | B | C | null
+evaluation_status: rated  # rated | insufficient_evidence | search_blocked | pending_verification
+evaluation_gaps: []
+```
 
-若不同候选方向等级不同，应逐项列明，不得用一个总评级掩盖高风险方向。
+#### `risk_grade`：只表达已有证据支持的风险判断
 
-A/B/C/D 还受来源状态约束：
+| 值 | 含义 | 后续动作 |
+|---|---|---|
+| `A` | 未发现相同或实质相同公开方案，区别特征和技术效果初步成立 | 可进入 Step 7；仍须写明检索范围和公开检索局限 |
+| `B` | 存在相似公开方案，但本案可用区别特征清楚，技术效果可强化 | 可进入 Step 7，但第一、二、四、五章须围绕区别特征收紧 |
+| `C` | 稳定证据表明高度相似，或主要区别特征弱/不可实施/技术效果不足 | 不按原方向直接撰写；改写、收缩到真实区别点或放弃主方向 |
+| `null` | 当前不具备给出 A/B/C 的证据条件 | 读取 `evaluation_status` 和 `evaluation_gaps` 后补检/复核；不得给“可授权”式结论 |
 
-- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。**并且最接近现有技术必须已核读独立权利要求原文（`claims_read=yes`）**；仅摘要级理解时最高 D/partial-D。
-- C：可以基于稳定来源确认“高度相似”或“区别特征弱”；若高度相似文献仅有未核验候选，不应直接判 C，应判 D/partial-D 并要求复核。
-- D：出现以下任一情形即为 D 或 partial-D：关键文献不可核验、只有 CNIPA EPUB 结果页候选、正负样本不足、检索式过窄/过宽、CNIPA/PSS 登录或验证码阻断、稳定来源标题/摘要冲突、无法说明 18 个月公开盲区外的检索覆盖。
+#### `evaluation_status`：表达当前评价是否完成
+
+| 值 | 中文显示 | 适用条件 |
+|---|---|---|
+| `rated` | 已评级 | 证据足以给出 A/B/C；此时 `risk_grade` 必须为 A、B 或 C |
+| `insufficient_evidence` | 证据不足 | 结果数量/相关性/检索覆盖不足，无法判断风险；`risk_grade` 必须为 `null` |
+| `search_blocked` | 检索受阻 | 关键渠道因登录、验证码、访问挑战、频率限制或环境问题受阻且影响结论；`risk_grade` 必须为 `null` |
+| `pending_verification` | 待核验 | 已有可能影响结论的候选，但稳定来源、著录冲突或独立权利要求尚待复核；`risk_grade` 必须为 `null` |
+
+一个方向只写一个当前主状态；并发缺口逐条写入 `evaluation_gaps`。状态选择按最直接的下一步：有明确候选待核验用 `pending_verification`；关键访问阻断且无法替代用 `search_blocked`；其余覆盖/数量不足用 `insufficient_evidence`。
+
+约束：
+
+- A/B：必须有足够检索范围、至少 3 条高相关阳性对照、主要高相关文献具备稳定 URL 或官方复核证据；允许少量新近 CNIPA 候选未被第三方收录，但不得影响结论核心。**最接近现有技术必须已核读独立权利要求原文（`claims_read=yes`）**。
+- C：须由稳定来源确认“高度相似”或“区别特征弱”；若高度相似文献仅是未核验候选，不能判 C，应转 `risk_grade: null` + `evaluation_status: pending_verification`。
+- 关键文献不可核验、只有发现级候选、正负样本不足、检索式过窄/过宽、关键渠道受阻、稳定来源冲突或覆盖无法说明时，`risk_grade` 必须为 `null`，并选择相应 `evaluation_status`。
+- 不同候选方向逐项列明，不得用一个总评级或总状态掩盖高风险/未完成方向。
 - 不得把“某个检索词超时/0 命中”写成“没有相关现有技术”；应记录为该检索词失败或无结果，并换词/换源补检。
+
+#### 旧数据读取兼容（仅输入映射，不得作为新输出）
+
+- 读取旧 `D` 或 `partial-D` 时统一先映射为 `risk_grade: null`。
+- 原记录明确为证据数量/覆盖不足 → `evaluation_status: insufficient_evidence`；明确为关键渠道阻断 → `search_blocked`；明确为候选/权利要求/公开源待核 → `pending_verification`。
+- `partial-D` 或旧记录原因含混时，按记录中的真实缺口选主状态，并在 `evaluation_gaps` 保留 `legacy_rating: D` 或 `legacy_rating: partial-D` 及待澄清原因。
+- **新生成的 YAML、表格、主题卡、确认记录和用户可见文本均不得再显示“D 级风险”或 `partial-D`。**用户可见文本改为“风险等级：暂不评级；评价状态：证据不足/检索受阻/待核验”。
 
 ### 链接来源与格式（须准确）
 
@@ -374,11 +409,11 @@ A/B/C/D 还受来源状态约束：
 
 完成 Step 5 后，必须回到 `patent_points_analyzer.md` 的 Step 3-4 表格，更新：
 
-- 查新风险等级 A/B/C/D。
+- 查新风险字段 `risk_grade: A | B | C | null` 与评价状态 `evaluation_status`。
 - 推荐方向是否变化：主推不变、降级、改写、放弃或待补检。
 - 可用区别特征：从对比表提炼，不得凭空新增。
-- 建议保护策略：保留四客体、收缩为方法+系统、收缩为系统/装置、拆分为两件申请或暂缓；策略必须服从查新结果和材料支撑。
-- 是否进入 Step 7：A/B 通常可进入；C 需先改写；D 需先补检或人工复核。
+- 建议保护策略：以五客体 canon（方法、系统/装置、电子设备、计算机可读存储介质、计算机程序产品）作为默认可选集合，再按查新结果、材料支撑与申请策略收缩为方法+系统、单一系统/装置、拆分申请或暂缓；不得机械固定全选。
+- 是否进入 Step 7：`rated + A/B` 通常可进入；`rated + C` 需先改写；`risk_grade: null` 时须按 `evaluation_status` 补检、解除阻断或完成人工复核。
 
 交底书后续章节必须服从该回写结果。若查新后发现主方向风险升高，必须在撰写前调整方向或向用户说明需要补充材料。
 
@@ -389,7 +424,8 @@ A/B/C/D 还受来源状态约束：
 | 字段 | 内容 |
 |---|---|
 | 签核人 / 日期 | 谁确认、何时 |
-| 本轮等级 | A/B/C/D（partial-D 须列明待办） |
+| 风险等级 | A / B / C / 暂不评级（机器值为 `null`） |
+| 评价状态 | 已评级 / 证据不足 / 检索受阻 / 待核验（记录机器枚举值） |
 | 证据包完整性 | dossier 五件（json/md、query_log、positive_controls、unverified_sources）是否齐全 |
 | PSS/官方源核验状态 | 已核验 / 条件未触发（关键文献均有稳定第三方复核，无需 PSS）/ 待办（列文献清单） |
 | 未核验条目影响 | 是否影响结论；影响时**不得**解除暂停条件、不得进入 PASS 轨道 |
@@ -408,7 +444,7 @@ A/B/C/D 还受来源状态约束：
 写入交底书 **1.1** 开头的「检索说明」时，面向**代理人/审查员**表述，**不要**暴露 Agent 查新流程或本仓库工具实现。
 
 - **须写**：实际使用的**公开数据库或渠道名称**（如「国家知识产权局专利公布公告系统」「Google Patents」「Espacenet」「Google Scholar」）、本案**主要检索词**（与 Step 5 用词一致或概括）；若部分条目经 **Google Patents** 等公开页复核著录项，可一句带过。
-- **须诚实说明**：若存在关键未核验候选或第三方未收录新近 CN 文献，1.1 中用简短句子提示“尚待 CNIPA PSS/代理人复核”，不要把 D/partial-D 包装成确定结论。
+- **须诚实说明**：若存在关键未核验候选或第三方未收录新近 CN 文献，1.1 中用简短句子提示“尚待 CNIPA PSS/代理人复核”，并将风险显示为“暂不评级”、评价状态显示为“待核验”，不得包装成确定结论。
 - **禁止写入 1.1 正文**：脚本/文件名（如 **`cnipa_epub_search.py`**、**`cnipa_epub_crawler.py`**）、「查新优先使用…检索工具」「是否触发 Google 学术降级」、Playwright、WebSearch、Agent、技能仓库名等**内部或流程元信息**。
 - **示例（须按本案替换检索词与渠道）**：
 

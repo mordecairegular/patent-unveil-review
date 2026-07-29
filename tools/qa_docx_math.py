@@ -110,6 +110,55 @@ FORMAL_REGEX_FAIL_PATTERNS = [
     ),
 ]
 
+# Commands observed to survive a failed LaTeX-to-OMML conversion as plain
+# alphabetic text after the backslash has already been swallowed.
+KNOWN_NAKED_LATEX_COMMANDS = {
+    "ell",
+    "kappa",
+    "mathcal",
+    "sim",
+    "sqrt",
+    "tilde",
+    "varphi",
+    "xi",
+    "zeta",
+}
+COMMON_MATH_IDENTIFIERS = {
+    "abs",
+    "acos",
+    "asin",
+    "atan",
+    "ceil",
+    "clip",
+    "cos",
+    "cosh",
+    "det",
+    "diag",
+    "exp",
+    "floor",
+    "lim",
+    "ln",
+    "log",
+    "max",
+    "mean",
+    "median",
+    "min",
+    "mod",
+    "prod",
+    "rank",
+    "round",
+    "sgn",
+    "sin",
+    "sinh",
+    "std",
+    "sum",
+    "tan",
+    "tanh",
+    "var",
+}
+ASCII_MATH_WORD_RE = re.compile(r"[A-Za-z]{3,}")
+LATEX_COMMAND_RE = re.compile(r"\\[A-Za-z]+")
+
 
 @dataclass
 class ManifestFormula:
@@ -163,6 +212,10 @@ def _visible_texts(root: ET.Element) -> list[str]:
         if node.text:
             texts.append(node.text)
     return texts
+
+
+def _math_texts(root: ET.Element) -> list[str]:
+    return [node.text for node in root.findall(".//m:t", NS) if node.text]
 
 
 def _context(text: str, pattern: str) -> str:
@@ -257,6 +310,64 @@ def _parse_manifest(manifest_path: Path | None) -> list[ManifestFormula]:
     return normalized
 
 
+def _manifest_literal_identifiers(formulas: list[ManifestFormula]) -> set[str]:
+    """Return intentional alphabetic labels, excluding LaTeX command names."""
+    identifiers: set[str] = set(COMMON_MATH_IDENTIFIERS)
+    for formula in formulas:
+        without_commands = LATEX_COMMAND_RE.sub(" ", formula.latex)
+        identifiers.update(
+            match.group(0).lower()
+            for match in ASCII_MATH_WORD_RE.finditer(without_commands)
+        )
+    return identifiers
+
+
+def _token_is_composed_of(token: str, allowed: set[str]) -> bool:
+    """Accept an OMML run that concatenates adjacent intentional identifiers."""
+    token = token.lower()
+    reachable = {0}
+    for start in range(len(token)):
+        if start not in reachable:
+            continue
+        for identifier in allowed:
+            if token.startswith(identifier, start):
+                reachable.add(start + len(identifier))
+    return len(token) in reachable
+
+
+def _scan_math_literal_words(
+    math_texts: list[str],
+    formulas: list[ManifestFormula],
+) -> list[dict[str, str | int]]:
+    """Catch commands silently downgraded to ordinary OMML text.
+
+    With a manifest, unknown long alphabetic identifiers are fail-closed.
+    Without one, only the known command set is blocked to avoid treating
+    legitimate domain abbreviations as errors.
+    """
+    allowed = _manifest_literal_identifiers(formulas)
+    occurrences: dict[tuple[str, str], list[str]] = {}
+    for text in math_texts:
+        for match in ASCII_MATH_WORD_RE.finditer(text):
+            token = match.group(0)
+            lower = token.lower()
+            if lower in KNOWN_NAKED_LATEX_COMMANDS and lower not in allowed:
+                occurrences.setdefault(("math_literal_command", lower), []).append(text)
+            elif formulas and not _token_is_composed_of(lower, allowed):
+                occurrences.setdefault(("math_literal_identifier", lower), []).append(text)
+    failures: list[dict[str, str | int]] = []
+    for (label, token), contexts in sorted(occurrences.items()):
+        failures.append(
+            {
+                "pattern": label,
+                "token": token,
+                "count": len(contexts),
+                "context": contexts[0][:120],
+            }
+        )
+    return failures
+
+
 def _equation_numbers(root: ET.Element, visible_text: str, *, allow_text_fallback: bool) -> list[str]:
     numbers: list[str] = []
     for row in root.findall(".//w:tr", NS):
@@ -290,6 +401,7 @@ def check_docx_math(
     xml = _read_document_xml(docx)
     root = ET.fromstring(xml)
     texts = _visible_texts(root)
+    math_texts = _math_texts(root)
     visible_text = "\n".join(texts)
     media_count = len(_media_parts(docx))
     code_style_count = xml.count("Consolas")
@@ -301,6 +413,7 @@ def check_docx_math(
         check_formal_text=check_formal_text,
     )
     formulas = _parse_manifest(Path(manifest_path) if manifest_path else None)
+    failed_patterns.extend(_scan_math_literal_words(math_texts, formulas))
     expected_numbers = [
         f.number
         for f in formulas

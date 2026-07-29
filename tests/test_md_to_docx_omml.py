@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 from docx import Document
+from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -115,6 +116,48 @@ def test_docx_math_qa_fails_on_bare_subscript_identifier(tmp_path: Path) -> None
 
     assert not report.passed
     assert any(item["pattern"] == "bare_subscript_identifier" for item in report.failed_patterns)
+
+
+def _append_omml_text(doc: Document, text: str) -> None:
+    paragraph = doc.add_paragraph()
+    math = OxmlElement("m:oMath")
+    run = OxmlElement("m:r")
+    value = OxmlElement("m:t")
+    value.text = text
+    run.append(value)
+    math.append(run)
+    paragraph._p.append(math)
+
+
+def test_docx_math_qa_fails_on_naked_latex_command_inside_omml(tmp_path: Path) -> None:
+    doc = Document()
+    _append_omml_text(doc, "sqrt1-(phi)2")
+    out = tmp_path / "bad_naked_command.docx"
+    doc.save(out)
+
+    report = check_docx_math(out)
+
+    assert not report.passed
+    assert any(
+        item["pattern"] == "math_literal_command" and item["token"] == "sqrt"
+        for item in report.failed_patterns
+    )
+
+
+def test_docx_math_qa_manifest_allows_intentional_identifiers(tmp_path: Path) -> None:
+    doc = Document()
+    _append_omml_text(doc, "Pgrosspre")
+    out = tmp_path / "intentional_identifier.docx"
+    doc.save(out)
+    manifest = tmp_path / "formula.yaml"
+    manifest.write_text(
+        "- id: f1\n  latex: Pgrosspre\n  display: false\n",
+        encoding="utf-8",
+    )
+
+    report = check_docx_math(out, manifest_path=manifest)
+
+    assert report.passed, report.failed_patterns
 
 
 def test_docx_formal_text_qa_fails_on_process_notes(tmp_path: Path) -> None:

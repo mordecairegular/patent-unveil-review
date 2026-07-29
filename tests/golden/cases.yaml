@@ -1,0 +1,254 @@
+schema_version: "1.0"
+suite_id: "patent-unveil-review-v3.11-routing-and-closure"
+description: >-
+  首批 10 个离线行为级 Golden Cases，覆盖任务路由、检索边界、代理回复计数、
+  修订锚点与 diff，以及专业能力边界。案例不评价具体专利法律结论。
+
+cases:
+  - id: GC01
+    title: "带批注 DOCX 要求修改"
+    category: "routing"
+    stimulus:
+      user: "请按这份带代理批注的交底书逐条修改并回复。"
+      attachments:
+        - "审阅版_带批注.docx"
+      fixture_notes:
+        - "DOCX 含 3 条顶层代理批注，其中 1 条为点批注。"
+    expected:
+      route: "revise.comment_closure"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "批注提取_YYYYMMDD.md"
+        - "案件名_代理批注定位版_YYYYMMDD.md"
+        - "批注处置矩阵.md"
+        - "案件名_YYYYMMDDHHmmss.md"
+        - "案件名_YYYYMMDDHHmmss.docx"
+        - "代理意见回复_YYYYMMDDHHmmss.md"
+      required_behaviors:
+        - "读取 iteration_context、review_comment_closure 和 correction_handler。"
+        - "逐字保留批注原文，并对点批注判断作用范围。"
+        - "矩阵区分内部判断、对外四态和 CLOSED/PARTIAL/OPEN。"
+        - "已落实或部分落实项登记规范机器锚点。"
+      forbidden_behaviors:
+        - "重跑候选池或全文专利点挖掘。"
+        - "改写、合并或摘要替代代理意见原文。"
+        - "只回复意见而不落地新版本。"
+
+  - id: GC02
+    title: "已有稿补充实施例"
+    category: "routing"
+    stimulus:
+      user: "请把新提供的实施例补进上一版交底书，其他章节尽量不动。"
+      attachments:
+        - "案件名_20260716093000.md"
+        - "新增实施例.md"
+      fixture_notes: []
+    expected:
+      route: "revise.merger"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "案件名_YYYYMMDDHHmmss.md"
+        - "案件名_YYYYMMDDHHmmss.docx"
+        - "交底书修订对话记录.md"
+      required_behaviors:
+        - "以最近定稿为基线，只合并新增实施例及必要联动内容。"
+        - "使用新时间戳另存，并保留原稿。"
+        - "输出合并摘要并更新修订记录。"
+      forbidden_behaviors:
+        - "覆盖基准稿。"
+        - "无理由从 Step 3 重新挖掘专利点。"
+
+  - id: GC03
+    title: "用户指出公式可能错误"
+    category: "routing_and_verification"
+    stimulus:
+      user: "式（3）可能有误，请检查公式和公式逻辑，有错再调整。"
+      attachments:
+        - "案件名_20260716093000.docx"
+      fixture_notes:
+        - "DOCX 中公式为 OMML。"
+    expected:
+      route: "revise.correction"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "案件名_YYYYMMDDHHmmss.md"
+        - "案件名_YYYYMMDDHHmmss.docx"
+        - "交底书修订对话记录.md"
+      required_behaviors:
+        - "先渲染或以可核验方式读取 OMML，再与原稿和公式清单逐字比对。"
+        - "按公式正确性、量纲、边界和流程逻辑复核后决定是否修改。"
+        - "若修改，联动符号表、流程、参数表、实施例和保护点。"
+      forbidden_behaviors:
+        - "依据纯文本提取中的空白直接断言公式缺失。"
+        - "未核验便照单修改。"
+
+  - id: GC04
+    title: "明确主题只要求查新"
+    category: "routing"
+    stimulus:
+      user: "主题已确定：基于多源量测的设备异常定位方法。请只做现有技术检索。"
+      attachments: []
+      fixture_notes: []
+    expected:
+      route: "search"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "prior_art_dossier.json"
+        - "prior_art_dossier.md"
+        - "query_log.md"
+        - "positive_controls.md"
+        - "unverified_sources.md"
+      required_behaviors:
+        - "直接进入 prior_art_search，不启动 T0。"
+        - "逐方向输出 risk_grade: A|B|C|null 与 evaluation_status。"
+        - "检索受阻或证据不足时显示暂不评级及原因。"
+      forbidden_behaviors:
+        - "先生成候选池或要求确认点 1/2。"
+        - "把 D 或 partial-D 作为新风险等级输出。"
+
+  - id: GC05
+    title: "询问业务可申请哪些方向"
+    category: "routing"
+    stimulus:
+      user: "我们做工业设备预测性维护，这个业务可以申请哪些专利方向？"
+      attachments: []
+      fixture_notes: []
+    expected:
+      route: "mine"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "主题边界卡"
+        - "查新探针记录"
+        - "候选主题卡_3至5张"
+      required_behaviors:
+        - "进入 candidate_pool，先形成并确认主题边界卡。"
+        - "把冷启动痛点标为假设，探针后才给风险等级。"
+        - "确认点 2 通过后才进入案件级查新。"
+      forbidden_behaviors:
+        - "直接承诺某方向可授权。"
+        - "未经探针用模型自评 GAP 排出主推方向。"
+
+  - id: GC06
+    title: "探针检索零命中"
+    category: "search_language"
+    stimulus:
+      user: "这个方向三组探针词都没有命中，能否认为没有现有技术？"
+      attachments: []
+      fixture_notes:
+        - "只完成探针范围检索，尚无案件级全文复核。"
+    expected:
+      route: "mine.probe"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts:
+        - "查新探针记录"
+      required_behaviors:
+        - "仅表述为‘探针范围内未检出’。"
+        - "说明零命中可能来自词块、覆盖或伪问题，并检查问题实在性。"
+        - "证据尚不足时输出 risk_grade: null、evaluation_status: insufficient_evidence。"
+      forbidden_behaviors:
+        - "表述为‘没有相关现有技术’或‘具备新颖性’。"
+        - "把未覆盖渠道写成未检出。"
+
+  - id: GC07
+    title: "三条代理意见只有两条回复"
+    category: "gate"
+    stimulus:
+      user: "请检查这份代理回复是否完整。"
+      attachments:
+        - "comments_3.json"
+        - "代理意见回复_仅2条.md"
+      fixture_notes:
+        - "顶层代理批注 3 条；回复稿只有 C01、C02。"
+    expected:
+      route: "revise.reply_gate"
+      gate:
+        id: "C14"
+        expected_status: "FAIL"
+      artifacts: []
+      required_behaviors:
+        - "按顶层代理批注计数，识别回复少 1 条。"
+        - "输出 C14 FAIL，并指出缺失编号。"
+      forbidden_behaviors:
+        - "把申请人自己的回复线程计为新的代理意见。"
+        - "在补齐第三条前称回复完整。"
+
+  - id: GC08
+    title: "声称修改 STEP:S4 但规范化后无变化"
+    category: "gate"
+    stimulus:
+      user: "回复称 STEP:S4 已落实，请核对实际修改。"
+      attachments:
+        - "baseline.md"
+        - "revision_same.md"
+        - "批注处置矩阵_STEP_S4.md"
+      fixture_notes:
+        - "基线与修订稿的 STEP:S4 规范化后完全相同。"
+    expected:
+      route: "revise.diff_gate"
+      gate:
+        id: "C17"
+        expected_status: "FAIL"
+      artifacts: []
+      required_behaviors:
+        - "先通过 C16 解析 STEP:S4，再比较基线与修订区块。"
+        - "规范化相似度为 100% 时输出 C17 FAIL。"
+      forbidden_behaviors:
+        - "仅因回复写了‘已落实’便判通过。"
+        - "用整篇文件的其它变化掩盖 STEP:S4 无变化。"
+
+  - id: GC09
+    title: "只改标点或空格"
+    category: "gate"
+    stimulus:
+      user: "回复称 SECTION:3.2 已修改，请判断变化是否充分。"
+      attachments:
+        - "baseline.md"
+        - "revision_punctuation_only.md"
+        - "批注处置矩阵_SECTION_3_2.md"
+      fixture_notes:
+        - "目标区块只改变标点或空格，规范化后高度相似且相似度不低于 0.98。"
+    expected:
+      route: "revise.diff_gate"
+      gate:
+        id: "C17"
+        expected_status: "WARN"
+      artifacts: []
+      required_behaviors:
+        - "输出 C17 WARN，标记疑似形式性修改并要求人工确认。"
+        - "明确 WARN 不代表意见已被语义解决。"
+      forbidden_behaviors:
+        - "把标点或空格变化直接判为实质落实。"
+        - "在存在可定位但高度相似的变化时误判 C16 FAIL。"
+
+  - id: GC10
+    title: "要求深度独立专业审阅"
+    category: "professional_boundary"
+    stimulus:
+      user: "请替代专利代理师，对这份交底书做独立深度专利性审阅并保证可授权。"
+      attachments:
+        - "交底书.docx"
+      fixture_notes: []
+    expected:
+      route: "out_of_scope_referral"
+      gate:
+        id: null
+        expected_status: "not_applicable"
+      artifacts: []
+      required_behaviors:
+        - "明确深度独立法律/专利性审阅与授权保证不属于本 Skill 核心能力。"
+        - "建议交由专用审阅 Agent 或专利代理人；可说明本 Skill 能做的基础逻辑、MVP 和交付格式检查。"
+      forbidden_behaviors:
+        - "冒充专利代理师或保证授权。"
+        - "把交付 PASS 解释为专利性通过。"

@@ -1,0 +1,6 @@
+host: codex
+producer: codex
+global_instruction_file: AGENTS.md
+skill_root_resolution: directory containing SKILL.md
+core_logic_location: SKILL.md, prompts, references, templates, tools
+adapter_rule: route to the shared core; do not duplicate patent-domain logic

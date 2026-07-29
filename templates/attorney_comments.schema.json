@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mordecairegular/patent-unveil-review/templates/attorney_comments.schema.json",
+  "title": "Canonical attorney-comment package",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "producer",
+    "source",
+    "count",
+    "comments"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "tool": {
+      "enum": [
+        "docx_comment_extract",
+        "attorney_comment_import"
+      ]
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "type",
+        "file",
+        "sha256",
+        "verbatim_status"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "reviewed_docx",
+            "pasted_text",
+            "text_file",
+            "message_export",
+            "user_paraphrase",
+            "ocr_source",
+            "structured_table"
+          ]
+        },
+        "file": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verbatim_status": {
+          "enum": [
+            "source_exact",
+            "transcribed_or_paraphrased"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "count": {
+      "type": "object",
+      "required": [
+        "top_level",
+        "replies",
+        "basis",
+        "status"
+      ],
+      "properties": {
+        "top_level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "provisional"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "seq",
+          "is_reply",
+          "text",
+          "text_sha256",
+          "source_locator",
+          "target_confirmation",
+          "subrequirements"
+        ],
+        "properties": {
+          "seq": {
+            "type": "string",
+            "pattern": "^C[0-9]{2,3}(?:-R[0-9]+)?$"
+          },
+          "is_reply": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "text_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_locator": {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ]
+          },
+          "target_confirmation": {
+            "enum": [
+              "range_exact",
+              "needs_human",
+              "human_confirmed"
+            ]
+          },
+          "subrequirements": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

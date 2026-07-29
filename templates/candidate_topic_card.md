@@ -1,12 +1,23 @@
 # 候选发明主题卡模板
 
 > 用法：T0.6 按本模板逐张输出（3–5 张，编号 T1、T2…）。卡头声明两条纪律：
-> ① 所有等级为探针级初判（A/B 标注为 `A-探针`/`B-探针`），案件级正式查新后按证据回写；用户终审只确认业务与材料边界，**不改判证据等级**。
+> ① 风险、评价完成度和评价范围分字段记录；案件级正式查新后按证据回写，用户终审只确认业务与材料边界，**不改判证据字段**。
 > ② 检索溯源纪律：每张卡必须带"检索溯源"行；未跑的渠道记"**未覆盖**"，禁止把"未检索"写成"未检出"。
 
 ---
 
-## T{n} {方向短名} 【{A-探针/B-探针/C/D/未评级（低置信）} · {探针级初判 YYYY-MM-DD / 案件级查新完成 YYYY-MM-DD}】
+## T{n} {方向短名} 【{探针级初判 / 案件级查新完成} · {YYYY-MM-DD}】
+
+```yaml
+evaluation:
+  risk_grade: {A | B | C | null}
+  evaluation_status: {rated | insufficient_evidence | search_blocked | pending_verification}
+  evaluation_scope: {probe | case}
+  evaluation_date: {YYYY-MM-DD}
+  evaluation_gaps: [{无则留空；否则逐条列证据缺口或阻断原因}]
+```
+
+字段约束：`evaluation_status: rated` 时 `risk_grade` 必须为 A/B/C；其它状态时 `risk_grade` 必须为 `null`。用户可见的 `null` 表述为“暂不评级”，不得显示为风险末级。
 
 - **简洁题名（≤25 字）**：一种{技术对象}{核心处理动作}方法及系统
 - **完整技术路线名**：一种基于{关键机制}的{场景限定}{技术对象}{核心动作}方法及系统（仅工作用；限定词不进正式题名）
@@ -21,7 +32,13 @@
 - **暂停条件**：若发现单篇覆盖"{特征组合}"，则{收缩至X / 与T{m}融合重构 / 放弃}
 - **检索溯源**：{渠道×次数、检索式编号、命中概况、来源状态}。**未覆盖**：{未跑渠道清单}
 - **用户终审**：{未终审 / YYYY-MM-DD 确认：逐问结论}
-- **案件级查新回写**：{留空，Step 5 后回填：结论等级、最接近文献、禁区扩充、暂停条件核销}
+- **案件级查新回写**：{留空，Step 5 后回填：risk_grade、evaluation_status、evaluation_scope=case、最接近文献、禁区扩充、暂停条件核销}
+
+### 旧卡只读兼容（读取后须迁移，不得原样新写）
+
+- 旧 `D/partial-D` 统一读取为 `risk_grade: null`，再按原记录原因映射到 `insufficient_evidence`、`search_blocked` 或 `pending_verification`；原值写入 `evaluation_gaps` 供追溯。
+- 旧卡把探针范围拼入等级时，拆成 A/B/C 风险值与 `evaluation_scope: probe`；案件级记录用 `evaluation_scope: case`。
+- 迁移后的主题卡只能保存本模板的新字段，不再输出旧复合等级或“D 级风险”。
 
 ### 权利要求骨架（附件；确认点 2 通过后补全，不生成正式权利要求）
 
