@@ -169,7 +169,7 @@ flowchart TB
 | 多维度并列 | \(b_{i,\mathrm{cpu}},\, b_{i,\mathrm{mem}}\) | \(b_i^{cpu}, b_i^{mem}\) |
 | 块级主公式 | \[ M_{ij} = \alpha b_{i,\mathrm{cpu}} + \beta a_{j,\mathrm{cpu}} \tag{1} \] 单行 | 块内多行 `\\` 换行堆叠（渲染易失败） |
 | 逻辑连接 | 公式外写「且 \(a_{j,\mathrm{mem}}\le 0\)」 | 公式内 `\text{且}` |
-| 分式 | \(\frac{E_{s,t,\mathrm{dis}}}{\eta_{\mathrm{dis}}}\) | `frac{E}{eta}` 或截图 |
+| 分式 | \(\frac{V_{t}}{\eta_{\mathrm{out}}}\) | `frac{V}{eta}` 或截图 |
 | 编号 | `\tag{1}` + 工具结构化排版 | 公式后手敲很多空格再写 `(1)` |
 
 **行内/块级分隔符**：全文统一 `\(...\)` / `\[...\]` **或** `$...$` / `$$...$$` 二选一；与 **`disclosure_builder.md` §7.7** 一致。

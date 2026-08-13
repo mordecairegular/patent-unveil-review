@@ -59,8 +59,8 @@ def test_block_math_with_legacy_png_comment_skips_formula_image(tmp_path: Path) 
 def test_fraction_math_uses_editable_omml_fraction_and_number_cell(tmp_path: Path) -> None:
     doc = convert_md_to_docx(
         "\\[\n"
-        "B_{s,t}=B_{s,t-1}+\\eta_{\\mathrm{ch}}E_{s,t,\\mathrm{ch}}"
-        "-\\frac{E_{s,t,\\mathrm{dis}}}{\\eta_{\\mathrm{dis}}}\\tag{1}\n"
+        "X_{t}=X_{t-1}+\\eta_{\\mathrm{in}}U_{t}"
+        "-\\frac{V_{t}}{\\eta_{\\mathrm{out}}}\\tag{1}\n"
         "\\]\n",
         base_dir=tmp_path,
     )
