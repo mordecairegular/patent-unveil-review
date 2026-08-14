@@ -125,7 +125,7 @@ DOCX 交付不得只看生成命令退出码。`qa_docx_math.py` 是 Word XML �
 | 迭代 | `prompts/correction_handler.md` | 对话纠正；**文首含门禁**；输出 `{案件名}_{时间戳}.md`/`.docx` |
 | 迭代 | `prompts/review_comment_closure.md` | 代理批注闭环：DOCX 批注提取（`tools/docx_comment_extract.py`）、点批注作用范围判断、overlay 标注版、批注处置矩阵、代理意见回复稿；分诊与改稿仍走 correction_handler |
 | 参考 | `references/structural_patent_requirements.md` | 结构有限辅助：CNIPA 附图规范、结构权利要求格式、部件编号规范；不用于创造性评估 |
-| 参考 | `references/method_system_patent_guide.md` | 工程方法、软件系统、四客体保护组合与常见授权风险参考 |
+| 参考 | `references/method_system_patent_guide.md` | 工程方法、软件系统、五客体保护组合（可选菜单）与常见授权风险参考 |
 | 参考 | `references/legal_sources.md` | 专利法、实施细则、审查指南 2023 及 2025 修改决定等法源索引 |
 | 参考 | `references/patent_workflow_lessons_ai_friendly.md` | 跨案件专利工作流沉淀：候选池启动、证据分级、GPT/Claude 协作、工程基础、WARN/PASS 交付和 AI 友好文档结构 |
 | 参考 | `references/commercial_patent_db_verification.md` | 商业专利库内容核验：壹专利/高数图操作边界、来源状态、正文与交接说明分离、代理人确认边界 |
