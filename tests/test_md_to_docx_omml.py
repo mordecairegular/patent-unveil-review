@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 from docx import Document
+from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -59,8 +60,8 @@ def test_block_math_with_legacy_png_comment_skips_formula_image(tmp_path: Path) 
 def test_fraction_math_uses_editable_omml_fraction_and_number_cell(tmp_path: Path) -> None:
     doc = convert_md_to_docx(
         "\\[\n"
-        "B_{s,t}=B_{s,t-1}+\\eta_{\\mathrm{ch}}E_{s,t,\\mathrm{ch}}"
-        "-\\frac{E_{s,t,\\mathrm{dis}}}{\\eta_{\\mathrm{dis}}}\\tag{1}\n"
+        "X_{t}=X_{t-1}+\\eta_{\\mathrm{in}}U_{t}"
+        "-\\frac{V_{t}}{\\eta_{\\mathrm{out}}}\\tag{1}\n"
         "\\]\n",
         base_dir=tmp_path,
     )
@@ -222,3 +223,45 @@ def test_docx_math_qa_passes_fixture_with_manifest(tmp_path: Path) -> None:
     assert report.passed
     assert report.math_block_count >= 5
     assert report.equation_number_count == 5
+
+
+def _append_omml_text(doc: Document, text: str) -> None:
+    paragraph = doc.add_paragraph()
+    math = OxmlElement("m:oMath")
+    run = OxmlElement("m:r")
+    value = OxmlElement("m:t")
+    value.text = text
+    run.append(value)
+    math.append(run)
+    paragraph._p.append(math)
+
+
+def test_docx_math_qa_fails_on_naked_latex_command_inside_omml(tmp_path: Path) -> None:
+    doc = Document()
+    _append_omml_text(doc, "sqrt1-(phi)2")
+    out = tmp_path / "bad_naked_command.docx"
+    doc.save(out)
+
+    report = check_docx_math(out)
+
+    assert not report.passed
+    assert any(
+        item["pattern"] == "math_literal_command" and item["token"] == "sqrt"
+        for item in report.failed_patterns
+    )
+
+
+def test_docx_math_qa_manifest_allows_intentional_identifiers(tmp_path: Path) -> None:
+    doc = Document()
+    _append_omml_text(doc, "Pgrosspre")
+    out = tmp_path / "intentional_identifier.docx"
+    doc.save(out)
+    manifest = tmp_path / "formula.yaml"
+    manifest.write_text(
+        "- id: f1\n  latex: Pgrosspre\n  display: false\n",
+        encoding="utf-8",
+    )
+
+    report = check_docx_math(out, manifest_path=manifest)
+
+    assert report.passed, report.failed_patterns

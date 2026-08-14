@@ -16,12 +16,12 @@
 | `prompts/project_scan.md` | Step 2：项目文档与代码扫描，Office 文档先转 Markdown |
 | `prompts/patent_points_analyzer.md` | Step 3-4：候选点、授权可行性初筛、方案成熟度与保护组合建议 |
 | `prompts/prior_art_search.md` | Step 5：CNIPA EPUB 优先查新、稳定来源复核、A/B/C/D 分级 |
-| `prompts/disclosure_builder.md` | Step 7：交底书结构、四客体保护思路、图示和命名规则 |
+| `prompts/disclosure_builder.md` | Step 7：交底书结构、五客体保护思路、图示和命名规则 |
 | `prompts/disclosure_self_check.md` | Step 8：内部自检与 PASS/WARN/FAIL 交付门禁 |
 | `prompts/iteration_context.md` | 迭代意图识别、命名、修订记录规则 |
 | `prompts/merger.md` | 新材料增量合并 |
 | `prompts/correction_handler.md` | 对话纠错与事实修正 |
-| `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、四客体模板 |
+| `prompts/template_reference.md` | 交底书章节范例、公式/mermaid 体例、五客体模板 |
 | `references/method_system_patent_guide.md` | 工程方法与软件系统类专利撰写参考 |
 | `references/commercial_patent_db_verification.md` | 壹专利/高数图内容核验、来源状态、正文与交接说明分离 |
 | `references/formal_disclosure_cleanliness.md` | 正式交底书正文清洁规则，防止流程说明、工具说明和证据状态进入正文 |
