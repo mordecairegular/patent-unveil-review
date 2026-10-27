@@ -108,7 +108,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/prior_art_dossier.py --case-dir "{案件目录
 ### A. 中国专利公布公告（**优先**，官方站点）
 
 1. **站点**：[国家知识产权局 中国专利公布公告](http://epub.cnipa.gov.cn/)（**仅** `epub.cnipa.gov.cn`）。
-2. **工具**（本仓库 `tools/`）：**`cnipa_epub_search.py`** —— **一步**完成公布站检索与结果解析（Playwright 过站点 WAF）；结果页 HTML **仅在内存中处理，不落盘**。成功时终端含 **`EPUB_NOTE:`**（ASCII，如 `html_bytes=… disk=0`）与 **`EPUB_HITS_JSON:`** 一行（JSON 数组：标题、公开号、`cnipa_qr_or_hint_url`、`google_patents_url`、`verification_status`、**`abstract`** 等）。
+2. **工具**（本仓库 `tools/`）：**`cnipa_epub_search.py`** —— **一步**完成公布站检索与结果解析（Playwright 浏览器访问并隐去无头/自动化标记，等待站点前端校验完成；遇到验证码、登录、频率限制或拦截页时停止并记录，不做破解，与下文 §D、§E.1 一致）；结果页 HTML **仅在内存中处理，不落盘**。成功时终端含 **`EPUB_NOTE:`**（ASCII，如 `html_bytes=… disk=0`）与 **`EPUB_HITS_JSON:`** 一行（JSON 数组：标题、公开号、`cnipa_qr_or_hint_url`、`google_patents_url`、`verification_status`、**`abstract`** 等）。
 3. **国知局检索词（生成阶段必做，须在拼 Bash 之前完成）**
 
    - **拆分责任在 Agent**：在**生成/构造命令阶段**，从本案技术方案、专利点或用户主题中归纳 **2～8 个与方案相关度高的检索单位**，**仅用 ASCII 空格分隔**，再写入 `cnipa_epub_search.py` 的参数。每一单位宜为 **有检索意义的语义块**，例如：**专业术语**、**名词短语**、**名动组合（如「批量调度」「异构调度」）**、**业内固定搭配**；**不要**拆成过碎的单字、泛义双字（如单独 `检索`、`增强`、`系统`、`方法` 等泛词），也**不要**把无关联词硬凑成一串。

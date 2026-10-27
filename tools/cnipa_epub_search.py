@@ -96,7 +96,11 @@ def main(argv: list[str] | None = None) -> int:
     _ensure_utf8_stdio()
     parser = argparse.ArgumentParser(
         prog="cnipa_epub_search.py",
-        description="CNIPA 公布公告检索+解析（Playwright 过 WAF）；空白拆词、一段一查、按公开号合并。",
+        description=(
+            "使用浏览器自动化访问 CNIPA 公布公告页面（隐去无头/自动化标记）并解析结果；"
+            "遇到验证码、登录、频率限制或拦截页时停止，不做破解。"
+            "空白拆词、一段一查、按公开号合并。"
+        ),
         epilog='example: python tools/cnipa_epub_search.py "batch 调度 异构"',
     )
     parser.add_argument(

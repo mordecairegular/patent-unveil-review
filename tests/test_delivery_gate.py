@@ -183,6 +183,20 @@ def test_filename_convention_warns_on_bad_name(tmp_path: Path) -> None:
     assert outcome.warn_items[0]["same_stem"] is False
 
 
+def test_filename_convention_accepts_optional_producer_suffix(tmp_path: Path) -> None:
+    for stem in ("一种测试方法_20260709120000", "一种测试方法_20260709120000_codex"):
+        outcome = delivery_gate.check_filename_convention(
+            tmp_path / f"{stem}.md", tmp_path / f"{stem}.docx"
+        )
+        assert outcome.status == "PASS", (stem, outcome.warn_items)
+
+    for bad in ("一种测试方法_codex", "一种测试方法_20260709120000_", "一种测试方法_2026070912_codex"):
+        outcome = delivery_gate.check_filename_convention(
+            tmp_path / f"{bad}.md", tmp_path / f"{bad}.docx"
+        )
+        assert outcome.status == "WARN", bad
+
+
 def test_fuzzy_qualifier_scan_flags_unquantified_not_quantified(tmp_path: Path) -> None:
     md = tmp_path / "body.md"
     md.write_text(
