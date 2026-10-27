@@ -36,7 +36,8 @@ USER_FILL_LINE_RE = re.compile(
 )
 USER_FILL_MARKER_RE = re.compile(r"（用户自填）|\[待填写\]|待填写")
 FIELD_LABEL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+){2,}\b")
-FILENAME_RE = re.compile(r"^.+_\d{14}\.(md|docx)$", re.I)
+# {规范化案件名}_{YYYYMMDDHHmmss}[_{producer}].{md,docx}; producer 可选（多来源并行，SKILL.md G2）。
+FILENAME_RE = re.compile(r"^.+_\d{14}(?:_[A-Za-z0-9-]+)?\.(md|docx)$", re.I)
 NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 DEFENSIVE_PHRASE_RE = re.compile(r"不在于|不作为|不强制|不以|不宜|显著降低")
 # 高信号模糊限定词（判定语境常被代理人追问“具体数值/条件是什么”）；

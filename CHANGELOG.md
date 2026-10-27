@@ -4,9 +4,20 @@
 
 ---
 
+## v3.12.1 (2026-10-27) - Consistency fixes after the v3.12.0 merge (no new gates)
+
+Patch release. Fixes three places where v3.12.0 contradicted itself; adds no new gate, rating level, or workflow step.
+
+- **Producer filename suffix now passes the delivery gate**: SKILL.md G2 already allowed parallel outputs named `{规范化案件名}_{YYYYMMDDHHmmss}_{producer}`, but `delivery_gate.py` C6 only accepted `_{14 digits}` and downgraded such deliveries to WARN, so they could never reach 代理人审稿就绪. C6 now accepts an optional `_{producer}` (ASCII letters, digits, hyphen). The canonical naming rule (`disclosure_builder.md` §7.3 points 4–5) and the `disclosure_self_check.md` filename item now state the same optional suffix. New test: `test_filename_convention_accepts_optional_producer_suffix`.
+- **CNIPA access wording made consistent**: `prior_art_search.md` §A and the `cnipa_epub_search.py` CLI description said "Playwright 过 WAF", contradicting §D/§E.1 ("遇验证码/风控/登录不得绕过"). Both now say the tool waits for the site's own page check to complete in the browser and stops on CAPTCHA, login, rate limiting, or an automation ban. Wording-only; crawler behavior is unchanged.
+- **Stale release notes corrected**: removed the v3.12.0 note about a second v3.12.0 lineage to be reconciled — that was resolved on 2026-08-14 (PR #2 merged as v3.12.0; PR #1 closed unmerged). REVISION_LOG Rev.3 test count corrected from 68/68 to the shipped 70/70.
+- Tests: 71/71 (70 prior + 1 producer-suffix filename test).
+
+---
+
 ## v3.12.0 (2026-08-14) - Absorb v3.11 consolidation onto the v3.10 line + drafting/revision-checklist gaps
 
-Consolidation-focused release on the v3.10.0 base. It folds in the v3.11 "simplification / consistency" line (no separate v3.11.0 entry on this branch) and the maintainer's drafting/revision optimization checklist, and deliberately keeps out the heavier C16/C17 anchor-diff gate machinery. (Note: a different v3.12.0 exists on the `agent/attorney-revision-hardening` branch; the two are separate lineages to be reconciled at merge time.)
+Consolidation-focused release on the v3.10.0 base. It folds in the v3.11 "simplification / consistency" line (no separate v3.11.0 entry on this branch) and the maintainer's drafting/revision optimization checklist, and deliberately keeps out the heavier C16/C17 anchor-diff gate machinery. (The parallel v3.12.0 on the `agent/attorney-revision-hardening` branch, PR #1, was closed unmerged on 2026-08-14; this entry is the only v3.12.0.)
 
 - **Protection-object single source of truth**: `references/method_system_patent_guide.md` §三 is the sole authority for the (optional) five protection objects via a machine-readable `protection-objects` block (`default_objects` + `allow_reduction: true`), stated up front as a menu, not a mandate. `tests/test_protection_objects_consistency.py` guards against drift; fixed real four-vs-five-object drift across README/SKILL/PRD/skill-structure/disclosure_preview/prior_art_search/intake/template_reference and added the missing 计算机程序产品 block to the claim template.
 - **Slim SKILL.md (204 → 117 lines)**: replace the 15 version-history blocks and the 40-line master checklist with positioning, five intent modes (mine/search/draft/revise/full), global invariants G1–G8, an execution contract, and Prompt/Reference/Tool routing tables; per-stage completion criteria stay in their prompts and `disclosure_self_check.md` §8; version history now lives only in this CHANGELOG. Host-neutral relative tool paths; G2 allows coexisting `_{producer}` outputs and does not force a single "final" doc or file hashes.
