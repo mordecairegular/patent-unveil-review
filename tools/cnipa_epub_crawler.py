@@ -9,7 +9,7 @@
 一、整体流程（单次检索）
 -------------------------------------------------------------------------------
 1. 启动 Chromium（默认无头；可用环境变量改为有界面）。
-2. 新建浏览器上下文：设定 **桌面 Chrome UA**、**zh-CN**、固定 **视口**（见 ``_new_context``），使请求形态接近普通用户浏览器。
+2. 新建浏览器上下文：使用 **本机 Chromium 的真实 UA（仅去掉 HeadlessChrome 标记）** 与 **zh-CN**（见 ``_new_context``），使请求形态接近普通用户浏览器。
 3. ``page.goto`` 站点首页，**wait_until="load"**。
 4. **等待首页可检索**：首页在访客到达后会先经 **前端脚本/WAF 一类逻辑**，未通过前 **不会出现** 检索输入框 ``#searchStr``。本实现通过 **周期性轮询 DOM**（每 3 秒一次，总时长见 ``EPUB_WAF_MAX_WAIT_SEC``，默认 180s）直到 ``#searchStr`` 出现；**不是**用 requests 直接 POST 能等价替代的步骤。
 5. ``page.fill`` 将关键词写入 ``#searchStr``，对 ``#indexForm`` 执行 **submit**（而非单独点按钮），并 ``expect_navigation`` 等待结果页 **load**。
@@ -22,7 +22,11 @@
 -------------------------------------------------------------------------------
 - **为何用 Playwright**：站点依赖 **浏览器内 JavaScript** 渲染与风控后再开放检索框；**纯 HTTP 抓取**往往拿不到含 ``#searchStr`` 的可用首页或拿不到真实结果 DOM。
 - **所谓「绕过」**：指 **技术层面** 与无头自动化、静态抓取之间的 gap——通过 **真实 Chromium 内核 + 等待 JS 完成 + 常见浏览器指纹**（UA、语言、viewport）降低「一进来就_submit」的失败率；**不**表示规避法律法规或站点服务条款，用途应限合法检索与交底书查新辅助。
-- **反自动化/特征**：启动参数 ``--disable-blink-features=AutomationControlled`` 用于减弱 Chromium 的 **webdriver 自动化开关** 暴露（效果因站点升级而变，非保证）。
+- **反自动化/特征**（只保留实测有效的三项，各堵一个最明显的无头/自动化破绽；效果因站点升级而变，非保证）：
+  1. 启动参数 ``--disable-blink-features=AutomationControlled``：``navigator.webdriver`` 由 true 变为 false；
+  2. UA 取本机 Chromium 真实值、仅去掉 ``HeadlessChrome``：请求头与 ``navigator.userAgent`` 不再出现无头标记，版本与系统保持真实（不写死旧版本）；
+  3. ``locale="zh-CN"``：无头模式默认不发 ``Accept-Language``，补上后与普通中文浏览器一致。
+  固定视口对检测无作用，已去除。公布站为 http，非安全上下文下浏览器不发送 ``sec-ch-ua`` 客户端提示，故无需另行处理。
 - **不覆盖的场景**：图形/滑块验证码、短信验证、强制登录等——若站点突然启用，本脚本**无**专门破解逻辑；可尝试 ``PLAYWRIGHT_HEADED=1`` 人工辅助或改用 **WebSearch**（见 ``prompts/prior_art_search.md``）。
 
 -------------------------------------------------------------------------------
@@ -63,10 +67,6 @@ def _ensure_utf8_stdio() -> None:
 
 
 EPUB_BASE = "http://epub.cnipa.gov.cn/"
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
 
 
 def _max_wait_sec() -> float:
@@ -191,17 +191,33 @@ def _launch_browser(p: Playwright) -> Browser:
     return p.chromium.launch(
         headless=not _headed(),
         args=[
+            # 隐去 navigator.webdriver=true（最常见的前端自动化检测项）
             "--disable-blink-features=AutomationControlled",
             "--no-sandbox",
         ],
     )
 
 
+def _real_browser_user_agent(browser: Browser) -> str:
+    """本机 Chromium 的真实 UA，仅去掉无头模式的 ``HeadlessChrome`` 标记。
+
+    版本号与操作系统保持真实，不写死旧版本（写死的旧 UA 与浏览器实际能力不一致，本身就是破绽）。
+    有界面模式下 UA 本无该标记，``_new_context`` 直接用默认 UA，不调用本函数。
+    """
+    probe = browser.new_context()
+    try:
+        ua = probe.new_page().evaluate("navigator.userAgent")
+    finally:
+        probe.close()
+    return ua.replace("HeadlessChrome", "Chrome")
+
+
 def _new_context(browser: Browser) -> BrowserContext:
     return browser.new_context(
-        user_agent=DEFAULT_USER_AGENT,
+        # 去掉请求头与 navigator.userAgent 中的 HeadlessChrome（有界面模式无此标记，用默认值）
+        user_agent=None if _headed() else _real_browser_user_agent(browser),
+        # 无头模式默认不发 Accept-Language；补上真实使用语言
         locale="zh-CN",
-        viewport={"width": 1280, "height": 900},
     )
 
 

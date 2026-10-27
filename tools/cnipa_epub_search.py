@@ -97,9 +97,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="cnipa_epub_search.py",
         description=(
-            "使用浏览器自动化访问 CNIPA 公布公告页面并解析结果；"
-            "遇到验证码、登录、频率限制或网站禁止自动访问时应停止，"
-            "不得绕过访问控制。空白拆词、一段一查、按公开号合并。"
+            "使用浏览器自动化访问 CNIPA 公布公告页面（隐去无头/自动化标记）并解析结果；"
+            "遇到验证码、登录、频率限制或拦截页时停止，不做破解。"
+            "空白拆词、一段一查、按公开号合并。"
         ),
         epilog='example: python tools/cnipa_epub_search.py "batch 调度 异构"',
     )
